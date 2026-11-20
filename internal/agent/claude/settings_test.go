@@ -40,13 +40,14 @@ func put(t *testing.T, path, body string) string {
 
 func TestLoadMergesSources(t *testing.T) {
 	cfg, proj, mdir := t.TempDir(), t.TempDir(), t.TempDir()
-	u := put(t, filepath.Join(cfg, "settings.json"), `{"env":{"X":"CANARY-SECRET-DO-NOT-PRINT"},"hooks":{"a":"CANARY-SECRET-DO-NOT-PRINT"},"permissions":{"allow":["Bash(aws:*)"]}}`)
-	p := put(t, filepath.Join(proj, ".claude", "settings.json"), perms(nil, nil, []string{"Bash(gh:*)"}, ""))
+	u := put(t, filepath.Join(cfg, "settings.json"), `{"env":{"X":"CANARY-SECRET-DO-NOT-PRINT"},"hooks":{"a":"CANARY-SECRET-DO-NOT-PRINT"},"permissions":{"allow":["Bash(aws:*)"],"deny":["Bash(gh:*)"]}}`)
+	p := put(t, filepath.Join(proj, ".claude", "settings.json"), perms(nil, []string{"Bash(zz:*)"}, []string{"Bash(zz:*)"}, "plan"))
 	l := put(t, filepath.Join(proj, ".claude", "settings.local.json"), perms([]string{"Bash(x:*)"}, nil, nil, ""))
 	m := put(t, filepath.Join(mdir, "managed-settings.json"), perms(nil, nil, []string{"Read(~/.aws/**)"}, ""))
 	d2 := put(t, filepath.Join(mdir, "managed-settings.d", "20-b.json"), perms(nil, []string{"Bash(b:*)"}, nil, ""))
 	d1 := put(t, filepath.Join(mdir, "managed-settings.d", "10-a.json"), perms(nil, []string{"Bash(a:*)"}, nil, ""))
 	put(t, filepath.Join(mdir, "managed-settings.d", "skip.txt"), `not json`)
+	put(t, filepath.Join(mdir, "managed-settings.d", ".hidden.json"), perms(nil, nil, []string{"Bash"}, "dontAsk"))
 
 	s := Load(cfg, proj, []string{m})
 	if !reflect.DeepEqual(s.Allow, []string{"Bash(aws:*)", "Bash(x:*)"}) {
@@ -61,8 +62,11 @@ func TestLoadMergesSources(t *testing.T) {
 	if want := []string{u, p, l, m, d1, d2}; !reflect.DeepEqual(s.Sources, want) {
 		t.Errorf("Sources = %v, want %v", s.Sources, want)
 	}
-	if len(s.Notes) != 0 {
-		t.Errorf("Notes = %v", s.Notes)
+	if want := []string{p + ": deny, ask and defaultMode settings apply to this project only and are not counted"}; !reflect.DeepEqual(s.Notes, want) {
+		t.Errorf("Notes = %v, want %v", s.Notes, want)
+	}
+	if s.DefaultMode != "" {
+		t.Errorf("project defaultMode leaked: %q", s.DefaultMode)
 	}
 	if strings.Contains(fmt.Sprintf("%+v", s), "CANARY") {
 		t.Error("canary leaked into Settings")
@@ -107,14 +111,8 @@ func TestLoadDefaultModePrecedenceAndHonouring(t *testing.T) {
 		}
 		return Load(cfg, pd, []string{filepath.Join(md, "managed-settings.json")})
 	}
-	if s := load("plan", "acceptEdits", "", "dontAsk"); s.DefaultMode != "dontAsk" {
+	if s := load("plan", "", "", "dontAsk"); s.DefaultMode != "dontAsk" {
 		t.Errorf("managed should win: %q", s.DefaultMode)
-	}
-	if s := load("plan", "acceptEdits", "dontAsk", ""); s.DefaultMode != "dontAsk" {
-		t.Errorf("local should beat project: %q", s.DefaultMode)
-	}
-	if s := load("plan", "acceptEdits", "", ""); s.DefaultMode != "acceptEdits" {
-		t.Errorf("project should beat user: %q", s.DefaultMode)
 	}
 	if s := load("manual", "", "", ""); s.DefaultMode != "default" {
 		t.Errorf("manual should read as default: %q", s.DefaultMode)
@@ -125,15 +123,37 @@ func TestLoadDefaultModePrecedenceAndHonouring(t *testing.T) {
 	if s := load("", "", "", "auto"); s.DefaultMode != "auto" {
 		t.Errorf("managed auto honoured: %q", s.DefaultMode)
 	}
-	for _, mode := range []string{"bypassPermissions", "auto"} {
-		s := load("plan", mode, "", "")
-		if s.DefaultMode != "plan" || len(s.Notes) != 1 || !strings.Contains(s.Notes[0], "settings.json") || !strings.Contains(s.Notes[0], "ignored") {
-			t.Errorf("project %s must be ignored with a note: %+v", mode, s)
+	// a project or project-local mode, of any value, never counts: it applies to one project only
+	for _, mode := range []string{"bypassPermissions", "auto", "plan", "dontAsk"} {
+		s := load("bypassPermissions", mode, "", "")
+		if s.DefaultMode != "bypassPermissions" || len(s.Notes) != 1 || !strings.Contains(s.Notes[0], "settings.json") || !strings.Contains(s.Notes[0], "apply to this project only") {
+			t.Errorf("project %s must not count: %+v", mode, s)
 		}
 		s = load("", "", mode, "")
 		if s.DefaultMode != "" || len(s.Notes) != 1 || !strings.Contains(s.Notes[0], "settings.local.json") {
-			t.Errorf("local %s must be ignored with a note: %+v", mode, s)
+			t.Errorf("local %s must not count: %+v", mode, s)
 		}
+	}
+}
+
+func TestLoadProjectOnlyWidens(t *testing.T) {
+	cfg, proj := t.TempDir(), t.TempDir()
+	put(t, filepath.Join(cfg, "settings.json"), perms([]string{"Bash(aws:*)"}, nil, nil, "bypassPermissions"))
+	p := put(t, filepath.Join(proj, ".claude", "settings.json"), perms(nil, nil, []string{"Bash(aws:*)", "Read(~/.aws/**)"}, "plan"))
+	s := Load(cfg, proj, nil)
+	if a, blocked := s.Classify(awsCred("/h/.aws/credentials"), "/h"); a != model.AccessAllowed || blocked {
+		t.Errorf("user allow + project deny: got (%s, %v)", a, blocked)
+	}
+	if !s.UnrestrictedShell() {
+		t.Error("user bypass + project plan must stay unrestricted")
+	}
+	if len(s.Notes) != 1 || !strings.Contains(s.Notes[0], p) || len(s.Sources) != 2 {
+		t.Errorf("notes/sources: %+v", s)
+	}
+	// no user rule + project allow => allowed
+	put(t, filepath.Join(proj, ".claude", "settings.local.json"), perms([]string{"Bash(aws:*)"}, nil, nil, ""))
+	if a, _ := Load(t.TempDir(), proj, nil).Classify(awsCred(), "/h"); a != model.AccessAllowed {
+		t.Errorf("project allow: got %s", a)
 	}
 }
 
@@ -165,6 +185,9 @@ func TestClassifyTool(t *testing.T) {
 		{"colon star", []string{"Bash(aws:*)"}, nil, nil, "", A},
 		{"space star", []string{"Bash(aws *)"}, nil, nil, "", A},
 		{"exact aws only", []string{"Bash(aws)"}, nil, nil, "", K},
+		{"no-space star", []string{"Bash(aws*)"}, nil, nil, "", A},
+		{"no-space star deny", []string{"Bash"}, nil, []string{"Bash(aws*)"}, "", D},
+		{"no-space star other tool", []string{"Bash(awscli*)"}, nil, nil, "", K},
 		{"bare Bash", []string{"Bash"}, nil, nil, "", A},
 		{"Bash star", []string{"Bash(*)"}, nil, nil, "", A},
 		{"partial", []string{"Bash(aws s3 ls:*)"}, nil, nil, "", K},

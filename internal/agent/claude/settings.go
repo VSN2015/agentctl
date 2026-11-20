@@ -35,23 +35,27 @@ func ManagedPaths(goos string) []string {
 // precedence for defaultMode; rule lists merge. It never fails: problems become Notes.
 func Load(configDir, projectDir string, managed []string) Settings {
 	var s Settings
-	s.read(filepath.Join(configDir, "settings.json"), true)
-	s.read(filepath.Join(projectDir, ".claude", "settings.json"), false)
-	s.read(filepath.Join(projectDir, ".claude", "settings.local.json"), false)
+	s.read(filepath.Join(configDir, "settings.json"), false)
+	s.read(filepath.Join(projectDir, ".claude", "settings.json"), true)
+	s.read(filepath.Join(projectDir, ".claude", "settings.local.json"), true)
 	for _, m := range managed {
-		s.read(m, true)
+		s.read(m, false)
 		drops, _ := filepath.Glob(filepath.Join(filepath.Dir(m), "managed-settings.d", "*.json"))
 		sort.Strings(drops)
 		for _, d := range drops {
-			s.read(d, true)
+			if strings.HasPrefix(filepath.Base(d), ".") {
+				continue // Claude Code ignores hidden drop-ins
+			}
+			s.read(d, false)
 		}
 	}
 	return s
 }
 
-// read merges one file. trusted is true for user and managed settings, the only places
-// Claude Code honours defaultMode auto and bypassPermissions.
-func (s *Settings) read(path string, trusted bool) {
+// read merges one file. A project file (project true) is the current project's only: it may widen
+// access with allow rules, but its deny, ask and defaultMode would otherwise let one repo decide a
+// machine-wide verdict, so they are not counted.
+func (s *Settings) read(path string, project bool) {
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) || (err == nil && len(bytes.TrimSpace(b)) == 0) {
 		return
@@ -71,19 +75,22 @@ func (s *Settings) read(path string, trusted bool) {
 	}
 	s.Sources = append(s.Sources, path)
 	p := f.Permissions
-	s.Allow, s.Ask, s.Deny = append(s.Allow, p.Allow...), append(s.Ask, p.Ask...), append(s.Deny, p.Deny...)
-	switch mode := p.DefaultMode; {
-	case mode == "":
-	case !trusted && (mode == "auto" || mode == "bypassPermissions"):
-		s.Notes = append(s.Notes, "defaultMode "+mode+" is ignored outside user and managed settings: "+path)
-	case mode == "manual":
+	s.Allow = append(s.Allow, p.Allow...)
+	if project {
+		if len(p.Deny)+len(p.Ask) > 0 || p.DefaultMode != "" {
+			s.Notes = append(s.Notes, path+": deny, ask and defaultMode settings apply to this project only and are not counted")
+		}
+		return
+	}
+	s.Ask, s.Deny = append(s.Ask, p.Ask...), append(s.Deny, p.Deny...)
+	if p.DefaultMode == "manual" {
 		s.DefaultMode = "default"
-	default:
-		s.DefaultMode = mode
+	} else if p.DefaultMode != "" {
+		s.DefaultMode = p.DefaultMode
 	}
 }
 
-// bashMatches reports whether rule applies to shell tool T: Bash with an empty, "*", "T *" or "T:*"
+// bashMatches reports whether rule applies to shell tool T: Bash with an empty, "*", "T *", "T:*" or "T*"
 // specifier. Bash(T) is an exact-command rule and does not match the tool.
 func bashMatches(rule, tool string) bool {
 	if rule == "Bash" {
@@ -94,7 +101,7 @@ func bashMatches(rule, tool string) bool {
 		return false
 	}
 	spec, ok = strings.CutSuffix(spec, ")")
-	return ok && (spec == "" || spec == "*" || spec == tool+" *" || spec == tool+":*")
+	return ok && (spec == "" || spec == "*" || spec == tool+" *" || spec == tool+":*" || spec == tool+"*")
 }
 
 func anyMatch(rules []string, f func(string) bool) bool {
