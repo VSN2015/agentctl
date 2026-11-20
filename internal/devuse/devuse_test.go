@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -112,5 +113,25 @@ func TestReadRetainsNoCommandText(t *testing.T) {
 	}
 	if s := fmt.Sprintf("%+v", h); strings.Contains(s, "CANARY-SECRET-DO-NOT-PRINT") {
 		t.Errorf("canary leaked: %s", s)
+	}
+}
+
+func TestReadCountsNonRegularHistoryAsUnread(t *testing.T) {
+	home := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(home, ".zsh_history"), 0o600); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Mkdir(filepath.Join(home, ".bash_history"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan History, 1)
+	go func() { done <- Read(home, noEnv) }()
+	select {
+	case h := <-done:
+		if h.Unread != 2 {
+			t.Errorf("Unread = %d, want 2", h.Unread)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Read did not return")
 	}
 }

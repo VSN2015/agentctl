@@ -10,7 +10,9 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/scan"
@@ -386,4 +388,37 @@ func contains(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func TestDiscoverRefusesFIFOAndOversizeHostsFile(t *testing.T) {
+	for name, mk := range map[string]func(p string) error{
+		"fifo": func(p string) error { return syscall.Mkfifo(p, 0o600) },
+		"oversize": func(p string) error {
+			return os.WriteFile(p, []byte("github.com:\n  user: "+strings.Repeat("a", 1<<20)+"\n"), 0o600)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, "gh", "hosts.yml")
+			if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := mk(p); err != nil {
+				t.Skip(err)
+			}
+			done := make(chan []model.Credential, 1)
+			go func() {
+				c, _ := New(nil).Discover(envOf(dir, map[string]string{"GH_CONFIG_DIR": filepath.Join(dir, "gh")}))
+				done <- c
+			}()
+			select {
+			case creds := <-done:
+				if len(creds) != 1 || creds[0].ID != "unreadable" || !contains(creds[0].Notes, "could not read hosts file") {
+					t.Fatalf("%+v", creds)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("Discover did not return")
+			}
+		})
+	}
 }

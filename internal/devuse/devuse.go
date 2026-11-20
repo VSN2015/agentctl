@@ -51,11 +51,20 @@ func Read(home string, getenv func(string) string) History {
 			continue
 		}
 		seen[p] = true
-		f, err := os.Open(p)
+		fi, err := os.Stat(p) // a FIFO or device would hang or never end; only regular files are read
 		if err != nil {
 			if !os.IsNotExist(err) {
 				h.Unread++
 			}
+			continue
+		}
+		if !fi.Mode().IsRegular() {
+			h.Unread++
+			continue
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			h.Unread++
 			continue
 		}
 		if err := h.scan(f); err != nil {

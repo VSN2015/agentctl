@@ -59,7 +59,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	case !filepath.IsAbs(dir):
 		notes = append(notes, "hosts file skipped: configuration directory is not an absolute path")
 	default:
-		if buf, err := os.ReadFile(path); err == nil {
+		if buf, err := model.ReadRegularFile(path); err == nil {
 			var hosts map[string]hostEntry
 			if err := yaml.Unmarshal(buf, &hosts); err != nil { // never echo err: yaml quotes file content
 				notes, hosts, failed = append(notes, "could not parse hosts file"), nil, true // yaml may return a partial map

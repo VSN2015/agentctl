@@ -56,7 +56,7 @@ func Load(configDir, projectDir string, managed []string) Settings {
 // access with allow rules, but its deny, ask and defaultMode would otherwise let one repo decide a
 // machine-wide verdict, so they are not counted.
 func (s *Settings) read(path string, project bool) {
-	b, err := os.ReadFile(path)
+	b, err := model.ReadRegularFile(path)
 	if os.IsNotExist(err) || (err == nil && len(bytes.TrimSpace(b)) == 0) {
 		return
 	}
