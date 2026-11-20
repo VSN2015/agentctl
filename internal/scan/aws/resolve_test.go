@@ -58,7 +58,7 @@ func TestResolveAdminRoleViaFake(t *testing.T) {
 	f := &fakeAPI{id: Identity{ARN: arn, Kind: "role", Name: "Admin"}, policies: []Policy{{Name: "AdministratorAccess", ARN: adminARN}}}
 	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
 	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
-	if err != nil || r.Identity != arn || !r.Admin {
+	if err != nil || r.Identity != arn || !r.Admin || !r.AdminChecked {
 		t.Fatalf("r=%+v err=%v", r, err)
 	}
 }
@@ -67,7 +67,7 @@ func TestResolveRootIsAdmin(t *testing.T) {
 	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:root", Kind: "root"}}
 	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
 	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
-	if err != nil || !r.Admin || f.polCalls != 0 {
+	if err != nil || !r.Admin || !r.AdminChecked || f.polCalls != 0 {
 		t.Fatalf("r=%+v err=%v policyCalls=%d", r, err, f.polCalls)
 	}
 }
@@ -76,7 +76,17 @@ func TestResolvePolicyFailureDegrades(t *testing.T) {
 	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}, polErr: errors.New("AccessDenied")}
 	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
 	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
-	if err != nil || r.Admin || !strings.Contains(r.AdminWhy, "could not read policies") {
+	if err != nil || r.Admin || r.AdminChecked || !strings.Contains(r.AdminWhy, "could not read policies") || len(r.AdminWhy) > 200 {
+		t.Fatalf("r=%+v err=%v", r, err)
+	}
+}
+
+func TestResolveNonAdminPoliciesAreChecked(t *testing.T) {
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"},
+		policies: []Policy{{Name: "ro", Document: []byte(`{"Statement":{"Effect":"Allow","Action":"s3:Get*","Resource":"*"}}`)}}}
+	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
+	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
+	if err != nil || r.Admin || !r.AdminChecked {
 		t.Fatalf("r=%+v err=%v", r, err)
 	}
 }

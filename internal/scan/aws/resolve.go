@@ -35,11 +35,14 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 	}
 	r := &model.Resolution{Identity: id.ARN}
 	if id.Kind == "root" {
-		r.Admin, r.AdminWhy = true, "root account"
+		r.AdminChecked, r.Admin, r.AdminWhy = true, true, "root account"
 	} else if ps, err := api.Policies(ctx, id); err != nil {
 		r.AdminWhy = "could not read policies: " + cleanErr("", err).Error()
-	} else if r.Admin, r.AdminWhy = IsAdmin(ps); !r.Admin {
-		r.AdminWhy = "no admin policy found (attached policies only)"
+	} else {
+		r.AdminChecked = true
+		if r.Admin, r.AdminWhy = IsAdmin(ps); !r.Admin {
+			r.AdminWhy = "no admin policy found (attached policies only)"
+		}
 	}
 	if key := s.keys[c.ID]; key != "" {
 		if t, err := api.AccessKeyLastUsed(ctx, key); err == nil {
