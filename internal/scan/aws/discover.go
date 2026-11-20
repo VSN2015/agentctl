@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/OWNER/agentctl/internal/model"
@@ -101,18 +102,28 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		}
 	}
 
+	// map iteration above is random; "default" first, then by name, for stable output
+	sort.Slice(order, func(i, j int) bool {
+		a, b := order[i], order[j]
+		return a != b && (a == "default" || (b != "default" && a < b))
+	})
 	var creds []model.Credential
 	for _, name := range order {
 		p := profiles[name]
-		c := model.Credential{Tool: "aws", ID: name, Label: model.Sanitize(name), Source: "file", Files: seen[name], Notes: notes}
+		id := name
+		switch name { // reserved IDs belong to the env, chain and unreadable credentials
+		case "environment", "chain", "unreadable":
+			id = "profile:" + name
+		}
+		c := model.Credential{Tool: "aws", ID: id, Label: model.Sanitize(name), Source: "file", Files: seen[name], Notes: notes}
 		c.Kind = kindOf(p.keys)
 		if c.Kind == "assume-role" {
 			c.Identity = p.keys["role_arn"]
 		}
-		if id := p.keys["aws_access_key_id"]; id != "" {
-			s.keys[name] = id
-			c.KeyID = model.MaskKeyID(id)
-			c.LongLived = c.Kind == "access-key" && longLived(id, p.keys["aws_session_token"] != "")
+		if key := p.keys["aws_access_key_id"]; key != "" {
+			s.keys[c.ID] = key
+			c.KeyID = model.MaskKeyID(key)
+			c.LongLived = c.Kind == "access-key" && longLived(key, p.keys["aws_session_token"] != "")
 		}
 		creds = append(creds, c)
 	}

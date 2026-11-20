@@ -243,3 +243,40 @@ func TestDiscoverOddProfileNames(t *testing.T) {
 		t.Fatalf("%q %+v", ids(m), m["default"])
 	}
 }
+
+func TestDiscoverOrderIsDeterministic(t *testing.T) {
+	home := fakeHome(t, "[profile zeta]\nrole_arn = a\n[profile alpha]\nrole_arn = a\n[profile mid]\nrole_arn = a\n[default]\nrole_arn = a\n",
+		"[beta]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\n")
+	e := env(home, map[string]string{"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "AWS_WEB_IDENTITY_TOKEN_FILE": "x"})
+	want := []string{"default", "alpha", "beta", "mid", "zeta", "environment", "chain"}
+	for i := 0; i < 20; i++ {
+		creds, err := New(nil).Discover(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, c := range creds {
+			got = append(got, c.ID)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v want %v", got, want)
+		}
+	}
+}
+
+func TestDiscoverReservedProfileName(t *testing.T) {
+	home := fakeHome(t, "", "[environment]\naws_access_key_id = AKIAAAAAAAAAAAAAAAAA\n")
+	s := New(nil)
+	creds, err := s.Discover(env(home, map[string]string{"AWS_ACCESS_KEY_ID": "AKIABBBBBBBBBBBBBBBB"}))
+	if err != nil || len(creds) != 2 {
+		t.Fatalf("%v %+v", err, creds)
+	}
+	f, e := creds[0], creds[1]
+	if f.ID != "profile:environment" || f.Label != "environment" || f.Source != "file" || f.KeyID != "AKIA****AAAA" ||
+		e.ID != "environment" || e.Source != "env" || e.KeyID != "AKIA****BBBB" {
+		t.Fatalf("%+v %+v", f, e)
+	}
+	if s.keys[f.ID] != "AKIAAAAAAAAAAAAAAAAA" || s.keys[e.ID] != "AKIABBBBBBBBBBBBBBBB" {
+		t.Fatal("raw keys cross-wired")
+	}
+}
