@@ -1,0 +1,24 @@
+[31mHIGH[0m  Prov1 · profile dev
+      AdministratorAccess. Agent can reach it.
+      Agent use, last 30 days: none
+      → Block the agent: deny t1
+
+[31mHIGH[0m  Prov1 · profile prod
+      static key, permissions unknown offline
+      Agent use, last 30 days: 2 calls
+
+[33mMED[0m   Prov2 · github.com
+      unused scopes
+      Scopes: repo, workflow
+      → Replace the token
+
+[33mMED[0m   Prov2 · other.example.com
+      token reachable
+      credential file blocked, tool still allowed
+
+[32mOK[0m    Prov2 · ghe.example.com — denied by agent settings
+
+Note: 1 agent history files could not be read
+Note: Prov1 profile x: online check skipped: needs login
+Note: agent deny rules are advisory unless the agent runs in a sandbox.
+Note: launch flags (such as skipping all permission prompts) are not visible in configuration files and are not detected.
