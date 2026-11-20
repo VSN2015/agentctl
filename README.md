@@ -2,7 +2,7 @@
 
 `agentctl` shows, read-only and on your own machine, what an AI coding agent can reach: which cloud and code-hosting credentials exist, whether the agent is allowed to use them, how much it actually does, and what to tighten.
 
-Supported today: one agent (Claude Code) and two tools (AWS and GitHub through `gh`). It runs on macOS and Linux, on laptops and on servers. It is a single static binary with no runtime dependencies, no telemetry, and no update check.
+Supported today: one agent (Claude Code) and two tools (AWS and GitHub through `gh`). It runs on macOS and Linux, on laptops and on servers. On Linux it is a statically linked binary; on macOS it links the system libraries. It has no runtime dependencies, no telemetry, and no update check.
 
 ## Install
 
@@ -35,7 +35,7 @@ Flags for both commands:
 
 ## What it reads
 
-It reads the files and environment where credentials are configured (for example `~/.aws`, the `gh` hosts file, environment variables), Claude Code settings and session history under every project, and your shell history. It reports names only (profile names, variable names, tool names, counts), never secret values: a value is not copied into output, logs, or error messages. Access key IDs are masked. It writes nothing to disk and keeps no state between runs.
+It reads the files and environment where credentials are configured (for example `~/.aws`, the `gh` hosts file, environment variables), Claude Code settings and session history under every project, and your shell history. It reports names only (profile names, variable names, tool names, counts), never secret values: a value is not copied into output, logs, or error messages. Access key IDs are masked. It writes nothing to disk and keeps no state between runs; this includes online runs, which skip any profile whose resolution would need a helper process, an MFA code, an SSO refresh or an `aws login` refresh (each skipped with a note).
 
 ## What it contacts, and when
 
@@ -43,7 +43,7 @@ By default it is online: it asks AWS (identity, attached policies, access key la
 
 - Answer `n`, or pass `--offline`: nothing leaves the machine.
 - `--yes`: skip the question.
-- No terminal and neither flag: it exits with status 2 and names `--yes` and `--offline`.
+- No terminal and neither flag, when there is a provider to contact: it exits with status 2 and names `--yes` and `--offline`. With nothing to contact it does not ask.
 
 A profile that would need a browser login, an MFA code, or a renewed session is skipped with a note and reported from files only. A failed or unauthorized call falls back to the file-only result with a note.
 
@@ -55,7 +55,7 @@ A profile that would need a browser login, an MFA code, or a renewed session is 
 | 1 | `doctor` found at least one HIGH finding |
 | 2 | error, usage mistake, or no terminal without `--yes`/`--offline` |
 
-The report goes to standard output; the prompt, notes about errors, and usage errors go to standard error. With `--json`, standard output carries only the JSON document.
+The report goes to standard output, including its per-source notes (for example "could not read"). Only the prompt, cancellation, and run or usage errors go to standard error. With `--json`, standard output carries only the JSON document.
 
 ## Output
 
