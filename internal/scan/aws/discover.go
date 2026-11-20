@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/OWNER/agentctl/internal/model"
-	"github.com/OWNER/agentctl/internal/scan"
+	"github.com/VSN2015/agentctl/internal/model"
+	"github.com/VSN2015/agentctl/internal/scan"
 )
 
 // keep: true stores the value, false stores only presence ("1").

@@ -4,7 +4,7 @@ package scan
 import (
 	"context"
 
-	"github.com/OWNER/agentctl/internal/model"
+	"github.com/VSN2015/agentctl/internal/model"
 )
 
 // Env is the process environment a scanner may look at; it is injected so tests stay hermetic.

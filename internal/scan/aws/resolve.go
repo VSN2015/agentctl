@@ -3,8 +3,8 @@ package aws
 import (
 	"context"
 
-	"github.com/OWNER/agentctl/internal/model"
-	"github.com/OWNER/agentctl/internal/scan"
+	"github.com/VSN2015/agentctl/internal/model"
+	"github.com/VSN2015/agentctl/internal/scan"
 )
 
 // Resolve is a placeholder until the API-backed implementation lands.
