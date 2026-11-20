@@ -23,9 +23,12 @@ var keep = map[string]bool{
 type Scanner struct {
 	api  APIFactory
 	keys map[string]string // credential ID -> raw access key id; never copied into model.Credential
+	mfa  map[string]bool   // credential IDs of profiles with mfa_serial; resolving them would prompt
 }
 
-func New(api APIFactory) *Scanner { return &Scanner{api: api, keys: map[string]string{}} }
+func New(api APIFactory) *Scanner {
+	return &Scanner{api: api, keys: map[string]string{}, mfa: map[string]bool{}}
+}
 
 func (s *Scanner) Name() string     { return "aws" }
 func (s *Scanner) Provider() string { return "AWS" }
@@ -37,7 +40,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	if getenv == nil {
 		getenv = func(string) string { return "" }
 	}
-	s.keys = map[string]string{}
+	s.keys, s.mfa = map[string]string{}, map[string]bool{}
 	var notes, failed []string
 	profiles := map[string]*profile{}
 	seen := map[string][]string{} // profile name -> files with a section for it, even a region-only one
@@ -117,6 +120,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		}
 		c := model.Credential{Tool: "aws", ID: id, Label: model.Sanitize(name), Source: "file", Files: seen[name], Notes: notes}
 		c.Kind = kindOf(p.keys)
+		s.mfa[id] = p.keys["mfa_serial"] != ""
 		if c.Kind == "assume-role" {
 			c.Identity = p.keys["role_arn"]
 		}
