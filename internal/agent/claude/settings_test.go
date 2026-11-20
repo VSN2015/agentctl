@@ -278,3 +278,32 @@ func TestUnrestrictedShell(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadKeysAreCaseSensitive(t *testing.T) {
+	cfg := t.TempDir()
+	put(t, filepath.Join(cfg, "settings.json"), `{"PERMISSIONS":{"deny":["Bash"]}}`)
+	if s := Load(cfg, t.TempDir(), nil); len(s.Deny) != 0 {
+		t.Errorf("PERMISSIONS counted: %v", s.Deny)
+	}
+	put(t, filepath.Join(cfg, "settings.json"), `{"permissions":{"Deny":["Bash"],"ALLOW":["Bash"],"DefaultMode":"bypassPermissions"}}`)
+	if s := Load(cfg, t.TempDir(), nil); len(s.Deny)+len(s.Allow) != 0 || s.DefaultMode != "" {
+		t.Errorf("mixed-case keys counted: %+v", s)
+	}
+	put(t, filepath.Join(cfg, "settings.json"), `{"permissions":{"deny":["Bash"]}}`)
+	if s := Load(cfg, t.TempDir(), nil); len(s.Deny) != 1 {
+		t.Errorf("exact keys lost: %+v", s)
+	}
+}
+
+func TestLoadUnknownDefaultModeKeepsCurrentMode(t *testing.T) {
+	cfg, md := t.TempDir(), t.TempDir()
+	put(t, filepath.Join(cfg, "settings.json"), perms(nil, nil, nil, "dontAsk"))
+	m := put(t, filepath.Join(md, "managed-settings.json"), perms(nil, nil, nil, "bogusMode"))
+	s := Load(cfg, t.TempDir(), []string{m})
+	if s.DefaultMode != "dontAsk" {
+		t.Errorf("mode = %q, want dontAsk", s.DefaultMode)
+	}
+	if len(s.Notes) != 1 || !strings.Contains(s.Notes[0], m) || !strings.Contains(s.Notes[0], "defaultMode") || strings.Contains(s.Notes[0], "bogusMode") {
+		t.Errorf("notes = %v", s.Notes)
+	}
+}

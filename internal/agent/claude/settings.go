@@ -32,7 +32,8 @@ func ManagedPaths(goos string) []string {
 
 // Load reads user settings.json, project settings.json and settings.local.json, then the managed
 // files (each followed by its managed-settings.d/*.json in name order). Later sources have higher
-// precedence for defaultMode; rule lists merge. It never fails: problems become Notes.
+// precedence for defaultMode; rule lists merge. Project files only widen access (their allow rules
+// count; deny, ask and defaultMode are noted and ignored). It never fails: problems become Notes.
 func Load(configDir, projectDir string, managed []string) Settings {
 	var s Settings
 	s.read(filepath.Join(configDir, "settings.json"), false)
@@ -60,21 +61,16 @@ func (s *Settings) read(path string, project bool) {
 	if os.IsNotExist(err) || (err == nil && len(bytes.TrimSpace(b)) == 0) {
 		return
 	}
-	var f struct {
-		Permissions struct {
-			Allow, Ask, Deny []string
-			DefaultMode      string `json:"defaultMode"`
-		} `json:"permissions"`
-	}
+	// exact key lookup: encoding/json's struct decoding would match "Deny" or "PERMISSIONS" too
+	var p permissions
 	if err == nil {
-		err = json.Unmarshal(b, &f)
+		err = decodePermissions(b, &p)
 	}
 	if err != nil {
 		s.Notes = append(s.Notes, "settings file unreadable or invalid, skipped: "+path)
 		return
 	}
 	s.Sources = append(s.Sources, path)
-	p := f.Permissions
 	s.Allow = append(s.Allow, p.Allow...)
 	if project {
 		if len(p.Deny)+len(p.Ask) > 0 || p.DefaultMode != "" {
@@ -83,11 +79,43 @@ func (s *Settings) read(path string, project bool) {
 		return
 	}
 	s.Ask, s.Deny = append(s.Ask, p.Ask...), append(s.Deny, p.Deny...)
-	if p.DefaultMode == "manual" {
+	switch p.DefaultMode {
+	case "":
+	case "manual":
 		s.DefaultMode = "default"
-	} else if p.DefaultMode != "" {
+	case "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions":
 		s.DefaultMode = p.DefaultMode
+	default:
+		s.Notes = append(s.Notes, path+": unknown defaultMode ignored")
 	}
+}
+
+type permissions struct {
+	Allow, Ask, Deny []string
+	DefaultMode      string
+}
+
+func decodePermissions(b []byte, p *permissions) error {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(b, &top); err != nil {
+		return err
+	}
+	raw, ok := top["permissions"]
+	if !ok {
+		return nil
+	}
+	var perms map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &perms); err != nil {
+		return err
+	}
+	for key, dst := range map[string]any{"allow": &p.Allow, "ask": &p.Ask, "deny": &p.Deny, "defaultMode": &p.DefaultMode} {
+		if v, ok := perms[key]; ok {
+			if err := json.Unmarshal(v, dst); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // bashMatches reports whether rule applies to shell tool T: Bash with an empty, "*", "T *", "T:*" or "T*"
