@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -44,6 +45,7 @@ func readUsage(ctx context.Context, configDir string, since, now time.Time) (usa
 	err := filepath.WalkDir(filepath.Join(configDir, "projects"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if d != nil && d.IsDir() {
+				u.Unread++
 				return fs.SkipDir
 			}
 			return nil
@@ -55,20 +57,20 @@ func readUsage(ctx context.Context, configDir string, since, now time.Time) (usa
 			return err
 		}
 		info, err := d.Info()
-		if err != nil {
-			return nil
+		if err != nil || !readFile(path, info.ModTime().Before(since), &u, seen, since, now) {
+			u.Unread++
 		}
-		readFile(path, info.ModTime().Before(since), &u, seen, since, now)
 		return nil
 	})
 	return u, err
 }
 
-// readFile adds one transcript to u. A stale file is only probed for its first timestamp.
-func readFile(path string, stale bool, u *usage.Usage, seen map[string]bool, since, now time.Time) {
+// readFile adds one transcript to u and reports whether it was read without I/O error.
+// A stale file is only probed for its first timestamp.
+func readFile(path string, stale bool, u *usage.Usage, seen map[string]bool, since, now time.Time) bool {
 	f, err := os.Open(path)
 	if err != nil {
-		return
+		return false
 	}
 	defer f.Close()
 	r := bufio.NewReader(f)
@@ -79,7 +81,7 @@ func readFile(path string, stale bool, u *usage.Usage, seen map[string]bool, sin
 			first = handleLine(line, n < probeLines && !first, stale, u, seen, since, now) || first
 		}
 		if err != nil || (stale && (first || n >= probeLines)) {
-			return // EOF, read error, or probe done
+			return err == nil || err == io.EOF // else read error; EOF or probe done is fine
 		}
 	}
 }

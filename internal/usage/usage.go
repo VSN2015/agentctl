@@ -26,6 +26,7 @@ type Usage struct {
 	HistoryStart time.Time // zero when there is no history
 	Shell        []Call
 	MCP          []MCPCall
+	Unread       int // history files or directories that could not be read; the caller must not claim "unused"
 }
 
 // HistoryDays is the whole days from HistoryStart to now; 0 if there is no history.
