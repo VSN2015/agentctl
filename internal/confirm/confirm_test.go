@@ -3,6 +3,7 @@ package confirm
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -33,7 +34,9 @@ func TestPromptText(t *testing.T) {
 		"AWS,GitHub,Foo": "About to ask AWS, GitHub and Foo what your credentials can do.",
 	} {
 		out.Reset()
-		Online(strings.NewReader("n\n"), &out, true, false, false, strings.Split(providers, ","))
+		if got, err := Online(strings.NewReader("n\n"), &out, true, false, false, strings.Split(providers, ",")); got || err != nil {
+			t.Errorf("%s: got %v %v", providers, got, err)
+		}
 		if !strings.HasPrefix(out.String(), want+"\n") {
 			t.Errorf("%s: %q", providers, out.String())
 		}
@@ -89,8 +92,23 @@ func TestNoProvidersNeverPrompts(t *testing.T) {
 
 func TestProviderNameIsNotAFormat(t *testing.T) {
 	var out bytes.Buffer
-	Online(strings.NewReader("n\n"), &out, true, false, false, []string{"%s%d"})
+	if got, err := Online(strings.NewReader("n\n"), &out, true, false, false, []string{"%s%d"}); got || err != nil {
+		t.Errorf("got %v %v", got, err)
+	}
 	if !strings.HasPrefix(out.String(), "About to ask %s%d what") {
 		t.Errorf("%q", out.String())
+	}
+}
+
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestWriteErrorsAreReturnedAndMeanNo(t *testing.T) {
+	for _, yes := range []bool{true, false} {
+		got, err := Online(strings.NewReader("y\n"), failWriter{}, true, false, yes, both)
+		if got || err == nil {
+			t.Errorf("yes=%v: got %v %v", yes, got, err)
+		}
 	}
 }

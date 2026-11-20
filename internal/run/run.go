@@ -131,7 +131,7 @@ func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Sca
 			if errors.As(err, &skip) {
 				note = "online check skipped: " + err.Error()
 			}
-			c.Notes = append(c.Notes, note)
+			c.Notes = append(slices.Clip(c.Notes), note)
 			addNote(rep, c.Label+": "+note)
 		default:
 			c.Resolved = res

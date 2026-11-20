@@ -2,7 +2,7 @@
 # Builds static release archives for darwin/linux x amd64/arm64 into dist/.
 set -euo pipefail
 
-if [ $# -ne 1 ] || [ -z "$1" ]; then
+if [ $# -ne 1 ] || ! [[ $1 =~ ^[0-9A-Za-z.+-]+$ ]]; then
   echo "usage: scripts/build.sh <version>   (for example 0.1.0)" >&2
   exit 2
 fi

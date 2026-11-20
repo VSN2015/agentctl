@@ -479,3 +479,23 @@ func TestCollectCancelledDuringConfirmAbortsEvenOnNo(t *testing.T) {
 		}
 	}
 }
+
+// A scanner may hand every credential the same notes slice; one credential's note must not leak into another's.
+func TestResolveNotesDoNotAliasAcrossCredentials(t *testing.T) {
+	r := newRig()
+	shared := make([]string, 0, 8)
+	r.sc.creds = []model.Credential{cred("fake", "a"), cred("fake", "b")}
+	r.sc.creds[0].Notes, r.sc.creds[1].Notes = shared, shared
+	r.sc.resolve = func(_ context.Context, c model.Credential) (*model.Resolution, error) {
+		return nil, errors.New("failed " + c.ID)
+	}
+	rep, err := Collect(context.Background(), inventory(), r.deps())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range []string{"a", "b"} {
+		if n := rep.Credentials[i].Notes; len(n) != 1 || !strings.Contains(n[0], "failed "+id) {
+			t.Errorf("credential %s notes = %v", id, n)
+		}
+	}
+}

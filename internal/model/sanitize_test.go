@@ -10,9 +10,10 @@ func TestSanitize(t *testing.T) {
 		"a\u2066b\u2069": "a?b?",
 		"tab\there":      "tab?here",
 		"l1\nl2":         "l1?l2",
-		"del\x7fx":       "del?x",
-		"c1\u0085x":      "c1?x",
-		"naïve 名前":       "naïve 名前",
+		"lrm\u200e rlm\u200f alm\u061c ls\u2028 ps\u2029": "lrm? rlm? alm? ls? ps?",
+		"del\x7fx":  "del?x",
+		"c1\u0085x": "c1?x",
+		"naïve 名前":  "naïve 名前",
 	}
 	for in, want := range cases {
 		if got := Sanitize(in); got != want {
