@@ -181,3 +181,60 @@ func TestReadStopsOnCancelledContext(t *testing.T) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
+
+// denied makes path unreadable, skipping the test where that has no effect (root).
+func denied(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(path, 0o755) })
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("permissions not enforced (running as root?)")
+	} else if _, err := os.ReadDir(path); err == nil {
+		t.Skip("permissions not enforced (running as root?)")
+	}
+}
+
+func TestReadCountsUnreadableDirectory(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects")
+	write(t, filepath.Join(p, "-ok", "s.jsonl"), bash(now.Add(-time.Minute), "u1", "aws s3 ls --profile prod"))
+	locked := filepath.Join(p, "-locked")
+	if err := os.Mkdir(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	denied(t, locked)
+	u := read(t, dir, now.Add(-time.Hour))
+	if u.Unread != 1 || len(u.Calls("aws")) != 1 {
+		t.Errorf("Unread=%d Shell=%+v, want 1 and one call", u.Unread, u.Shell)
+	}
+}
+
+func TestReadCountsUnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects", "-a")
+	write(t, filepath.Join(p, "ok.jsonl"), bash(now.Add(-time.Minute), "u1", "aws s3 ls"))
+	write(t, filepath.Join(p, "bad.jsonl"), bash(now.Add(-time.Minute), "u2", "aws s3 ls --profile prod"))
+	if err := os.Chmod(filepath.Join(p, "bad.jsonl"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadFile(filepath.Join(p, "bad.jsonl")); err == nil {
+		t.Skip("permissions not enforced (running as root?)")
+	}
+	u := read(t, dir, now.Add(-time.Hour))
+	if u.Unread != 1 || len(u.Calls("aws")) != 1 {
+		t.Errorf("Unread=%d Shell=%+v, want 1 and one call", u.Unread, u.Shell)
+	}
+}
+
+func TestReadCleanTreeHasNoUnread(t *testing.T) {
+	dir := t.TempDir()
+	if u := read(t, dir, now.Add(-time.Hour)); u.Unread != 0 {
+		t.Errorf("missing root: Unread=%d", u.Unread)
+	}
+	write(t, filepath.Join(dir, "projects", "-a", "s.jsonl"), bash(now.Add(-time.Minute), "u1", "aws s3 ls"), "garbage tool_use")
+	if u := read(t, dir, now.Add(-time.Hour)); u.Unread != 0 {
+		t.Errorf("clean tree: Unread=%d", u.Unread)
+	}
+}
