@@ -16,13 +16,12 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 	switch {
 	case c.ID == "unreadable":
 		return nil, &scan.SkipError{Reason: "credential file could not be read"}
+	case s.skip[c.ID]:
+		return nil, &scan.SkipError{Reason: "resolving would run a credential process or prompt for MFA"}
 	case c.Source == "file":
 		profile = c.ID
 		if rest, ok := strings.CutPrefix(profile, "profile:"); ok && reserved(rest) {
 			profile = rest
-		}
-		if c.Kind == "credential-process" || s.mfa[c.ID] {
-			return nil, &scan.SkipError{Reason: "resolving would run a credential process or prompt for MFA"}
 		}
 	}
 	api, err := s.api(ctx, profile)
@@ -34,20 +33,29 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 		return nil, cleanErr("aws identity", err)
 	}
 	r := &model.Resolution{Identity: id.ARN}
-	if id.Kind == "root" {
-		r.AdminChecked, r.Admin, r.AdminWhy = true, true, "root account"
-	} else if ps, err := api.Policies(ctx, id); err != nil {
-		r.AdminWhy = "could not read policies: " + cleanErr("", err).Error()
-	} else {
-		r.AdminChecked = true
-		if r.Admin, r.AdminWhy = IsAdmin(ps); !r.Admin {
-			r.AdminWhy = "no admin policy found (attached policies only)"
+	// before Policies: our own IAM calls may update the key's last-used record
+	if key := s.keys[c.ID]; key != "" {
+		if u, err := api.AccessKeyLastUsed(ctx, key); err == nil {
+			r.KeyChecked = true
+			if u != nil {
+				r.KeyLastUsed, r.KeyLastUsedService = &u.At, u.Service
+			}
 		}
 	}
-	if key := s.keys[c.ID]; key != "" {
-		if t, err := api.AccessKeyLastUsed(ctx, key); err == nil {
-			r.KeyChecked, r.KeyLastUsed = true, t
+	switch id.Kind {
+	case "root":
+		r.AdminChecked, r.Admin, r.AdminWhy = true, true, "root account"
+	case "user", "role":
+		if ps, err := api.Policies(ctx, id); err != nil {
+			r.AdminWhy = "could not read policies: " + cleanErr("", err).Error()
+		} else {
+			r.AdminChecked = true
+			if r.Admin, r.AdminWhy = IsAdmin(ps); !r.Admin {
+				r.AdminWhy = "no admin policy found (attached policies only)"
+			}
 		}
+	default:
+		r.AdminWhy = "principal type not inspected"
 	}
 	return r, nil
 }

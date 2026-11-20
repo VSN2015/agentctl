@@ -16,17 +16,20 @@ type fakeAPI struct {
 	idErr    error
 	policies []Policy
 	polErr   error
-	last     *time.Time
+	last     *KeyUse
+	calls    []string
 	lastErr  error
 	polCalls int
 }
 
 func (f *fakeAPI) CallerIdentity(context.Context) (Identity, error) { return f.id, f.idErr }
 func (f *fakeAPI) Policies(context.Context, Identity) ([]Policy, error) {
+	f.calls = append(f.calls, "policies")
 	f.polCalls++
 	return f.policies, f.polErr
 }
-func (f *fakeAPI) AccessKeyLastUsed(context.Context, string) (*time.Time, error) {
+func (f *fakeAPI) AccessKeyLastUsed(context.Context, string) (*KeyUse, error) {
+	f.calls = append(f.calls, "lastused")
 	return f.last, f.lastErr
 }
 
@@ -93,11 +96,11 @@ func TestResolveNonAdminPoliciesAreChecked(t *testing.T) {
 
 func TestResolveKeyLastUsed(t *testing.T) {
 	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}, last: &when}
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}, last: &KeyUse{At: when, Service: "s3"}}
 	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
 	c := find(t, creds, "default")
 	r, err := s.Resolve(context.Background(), c)
-	if err != nil || !r.KeyChecked || r.KeyLastUsed == nil || !r.KeyLastUsed.Equal(when) {
+	if err != nil || !r.KeyChecked || r.KeyLastUsed == nil || !r.KeyLastUsed.Equal(when) || r.KeyLastUsedService != "s3" {
 		t.Fatalf("used: r=%+v err=%v", r, err)
 	}
 	f.last = nil
@@ -111,10 +114,30 @@ func TestResolveKeyLastUsed(t *testing.T) {
 	}
 }
 
+func TestResolveKeyLastUsedBeforePolicies(t *testing.T) {
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}}
+	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
+	if _, err := s.Resolve(context.Background(), find(t, creds, "default")); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(f.calls, ","); got != "lastused,policies" {
+		t.Errorf("call order = %s", got)
+	}
+}
+
+func TestResolveUninspectedPrincipalIsNotChecked(t *testing.T) {
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:sts::1:federated-user/x", Kind: "other"}}
+	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
+	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
+	if err != nil || r.AdminChecked || r.Admin || r.AdminWhy != "principal type not inspected" {
+		t.Fatalf("r=%+v err=%v", r, err)
+	}
+}
+
 func TestResolveSkipsPromptingProfiles(t *testing.T) {
-	cfg := "[profile proc]\ncredential_process = /bin/true\n\n[profile mfa]\nrole_arn = arn:aws:iam::1:role/r\nmfa_serial = arn:aws:iam::1:mfa/me\nsource_profile = default\n"
+	cfg := "[profile proc]\ncredential_process = /bin/true\n\n[profile mfa]\nrole_arn = arn:aws:iam::1:role/r\nmfa_serial = arn:aws:iam::1:mfa/me\nsource_profile = default\n\n[profile hop]\nrole_arn = arn:aws:iam::1:role/r\nsource_profile = proc\n"
 	s, creds, profiles := scannerWith(t, &fakeAPI{}, cfg, basicKeys, nil)
-	for _, id := range []string{"proc", "mfa"} {
+	for _, id := range []string{"proc", "mfa", "hop"} {
 		_, err := s.Resolve(context.Background(), find(t, creds, id))
 		var skip *scan.SkipError
 		if !errors.As(err, &skip) {
@@ -157,5 +180,39 @@ func TestResolveUsesChainForEnvironmentAndChain(t *testing.T) {
 	want := []string{"", "", "default", "environment"}
 	if strings.Join(*profiles, "|") != strings.Join(want, "|") {
 		t.Errorf("profiles = %q, want %q", *profiles, want)
+	}
+}
+
+func TestResolveSourceProfileCycleTerminates(t *testing.T) {
+	cfg := "[profile a]\nrole_arn = arn:aws:iam::1:role/a\nsource_profile = b\n\n[profile b]\nrole_arn = arn:aws:iam::1:role/b\nsource_profile = a\n"
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}}
+	s, creds, _ := scannerWith(t, f, cfg, "", nil)
+	if _, err := s.Resolve(context.Background(), find(t, creds, "a")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolveFallbackProfileOfChainIsChecked(t *testing.T) {
+	cfg := "[default]\ncredential_process = /bin/true\n\n[profile safe]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\n"
+	chainVars := map[string]string{"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/x"}
+	cases := []struct {
+		name string
+		vars map[string]string
+		id   string
+		skip bool
+	}{
+		{"chain falls back to default", chainVars, "chain", true},
+		{"chain honours AWS_PROFILE", map[string]string{"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/x", "AWS_PROFILE": "safe"}, "chain", false},
+		{"env without secret falls back", map[string]string{"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE"}, "environment", true},
+		{"env with secret does not", map[string]string{"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "AWS_SECRET_ACCESS_KEY": "x"}, "environment", false},
+	}
+	for _, c := range cases {
+		f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}}
+		s, creds, _ := scannerWith(t, f, cfg, "", c.vars)
+		_, err := s.Resolve(context.Background(), find(t, creds, c.id))
+		var skip *scan.SkipError
+		if errors.As(err, &skip) != c.skip || (!c.skip && err != nil) {
+			t.Errorf("%s: err = %v, want skip=%v", c.name, err, c.skip)
+		}
 	}
 }

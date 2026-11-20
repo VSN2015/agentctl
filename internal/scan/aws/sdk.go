@@ -2,15 +2,17 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -50,6 +52,7 @@ func NewSDK() APIFactory {
 	return func(ctx context.Context, profile string) (API, error) {
 		opts := []func(*config.LoadOptions) error{
 			config.WithDefaultRegion("us-east-1"), config.WithRetryMaxAttempts(2),
+			config.WithSSOTokenProviderOptions(noRefresh),
 		}
 		if profile != "" {
 			opts = append(opts, config.WithSharedConfigProfile(profile))
@@ -88,15 +91,16 @@ func identityFromARN(arn, account string) Identity {
 	return id
 }
 
-func (a *sdkAPI) AccessKeyLastUsed(ctx context.Context, keyID string) (*time.Time, error) {
+func (a *sdkAPI) AccessKeyLastUsed(ctx context.Context, keyID string) (*KeyUse, error) {
 	out, err := a.iam.GetAccessKeyLastUsed(ctx, &iam.GetAccessKeyLastUsedInput{AccessKeyId: &keyID})
 	if err != nil {
 		return nil, err
 	}
-	if out.AccessKeyLastUsed == nil {
+	u := out.AccessKeyLastUsed
+	if u == nil || u.LastUsedDate == nil {
 		return nil, nil
 	}
-	return out.AccessKeyLastUsed.LastUsedDate, nil
+	return &KeyUse{At: *u.LastUsedDate, Service: strings.ToLower(awssdk.ToString(u.ServiceName))}, nil
 }
 
 const adminARN = "arn:aws:iam::aws:policy/AdministratorAccess"
@@ -288,4 +292,16 @@ func pages[T any](fetch func(marker *string) ([]T, *string, error)) ([]T, error)
 		}
 		m = nm
 	}
+}
+
+// noRefresh makes an expired SSO token fail instead of being renewed: SDK refreshToken calls
+// ssooidc CreateToken and only afterwards rewrites ~/.aws/sso/cache, so an erroring client
+// blocks both the call and the write. Legacy sso_start_url profiles read the cache without
+// any refresh path (ssocreds Provider.Retrieve returns InvalidTokenError when expired).
+func noRefresh(o *ssocreds.SSOTokenProviderOptions) { o.Client = noCreateToken{} }
+
+type noCreateToken struct{}
+
+func (noCreateToken) CreateToken(context.Context, *ssooidc.CreateTokenInput, ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error) {
+	return nil, errors.New("SSO session expired; run aws sso login (agentctl never renews tokens)")
 }

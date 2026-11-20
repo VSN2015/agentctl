@@ -23,11 +23,11 @@ var keep = map[string]bool{
 type Scanner struct {
 	api  APIFactory
 	keys map[string]string // credential ID -> raw access key id; never copied into model.Credential
-	mfa  map[string]bool   // credential IDs of profiles with mfa_serial; resolving them would prompt
+	skip map[string]bool   // credential IDs whose resolution could run a credential_process or prompt for MFA
 }
 
 func New(api APIFactory) *Scanner {
-	return &Scanner{api: api, keys: map[string]string{}, mfa: map[string]bool{}}
+	return &Scanner{api: api, keys: map[string]string{}, skip: map[string]bool{}}
 }
 
 func (s *Scanner) Name() string     { return "aws" }
@@ -40,7 +40,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	if getenv == nil {
 		getenv = func(string) string { return "" }
 	}
-	s.keys, s.mfa = map[string]string{}, map[string]bool{}
+	s.keys, s.skip = map[string]string{}, map[string]bool{}
 	var notes, failed []string
 	profiles := map[string]*profile{}
 	seen := map[string][]string{} // profile name -> files with a section for it, even a region-only one
@@ -92,6 +92,10 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 			}
 		}
 	}
+	fallback := getenv("AWS_PROFILE") // the profile the SDK uses when nothing else is chosen
+	if fallback == "" {
+		fallback = "default"
+	}
 	cfg, crd := getenv("AWS_CONFIG_FILE"), getenv("AWS_SHARED_CREDENTIALS_FILE")
 	if cfg == "" && env.Home != "" {
 		cfg = filepath.Join(env.Home, ".aws", "config")
@@ -120,7 +124,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		}
 		c := model.Credential{Tool: "aws", ID: id, Label: model.Sanitize(name), Source: "file", Files: seen[name], Notes: notes}
 		c.Kind = kindOf(p.keys)
-		s.mfa[id] = p.keys["mfa_serial"] != ""
+		s.skip[id] = prompts(profiles, name)
 		if c.Kind == "assume-role" {
 			c.Identity = p.keys["role_arn"]
 		}
@@ -145,9 +149,12 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 			}
 		}
 		s.keys["environment"] = id
+		// without a full key pair the SDK falls back to a shared-config profile
+		s.skip["environment"] = getenv("AWS_SECRET_ACCESS_KEY") == "" && prompts(profiles, fallback)
 		creds = append(creds, c)
 	}
 
+	s.skip["chain"] = prompts(profiles, fallback)
 	chain := model.Credential{Tool: "aws", ID: "chain", Label: "default credential chain", Kind: "unknown", Source: "chain"}
 	switch {
 	case getenv("AWS_WEB_IDENTITY_TOKEN_FILE") != "":
@@ -162,6 +169,23 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		return creds, nil
 	}
 	return append(creds, chain), nil
+}
+
+// prompts reports whether resolving the profile, or any profile reached through source_profile,
+// would run a credential_process or ask for an MFA code.
+func prompts(profiles map[string]*profile, name string) bool {
+	for seen := map[string]bool{}; !seen[name]; {
+		seen[name] = true
+		p := profiles[name]
+		if p == nil {
+			return false
+		}
+		if p.keys["credential_process"] != "" || p.keys["mfa_serial"] != "" {
+			return true
+		}
+		name = p.keys["source_profile"]
+	}
+	return false
 }
 
 func kindOf(k map[string]string) string {
