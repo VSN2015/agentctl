@@ -256,7 +256,7 @@ func TestEvaluateOrderingAndEmpty(t *testing.T) {
 func TestEngineUnknownKindIsUnattributable(t *testing.T) {
 	r := &fakeRule{dev: DevUse{State: DevNobody}, revoke: "REV"}
 	c := cred(model.AccessAllowed, false)
-	c.Kind = "unknown"
+	c.Kind, c.ID = "unknown", "unreadable"
 	f := run(c, agentIn(fakeUsage(45, 0)), r)
 	if f.Severity != model.SevOK || len(f.Advice) != 0 || !has(f.Details, "cannot be attributed") || has(f.Details, "unused") {
 		t.Fatalf("%+v", f)
@@ -278,4 +278,13 @@ func devuse0Unread() devuse.History {
 	_ = os.Mkdir(filepath.Join(home, ".zsh_history"), 0o700)
 	defer os.RemoveAll(home)
 	return devuse.Read(home, func(string) string { return "" })
+}
+
+func TestEngineUnknownKindRealCredentialIsNormal(t *testing.T) {
+	c := model.Credential{Tool: "aws", ID: "chain", Kind: "unknown", Source: "chain",
+		Access: []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}}
+	f := run(c, agentIn(hist(45)), AWSRule{})
+	if f.Severity != model.SevMed || !has(f.Rules, "usage.unused") {
+		t.Fatalf("%+v", f)
+	}
 }

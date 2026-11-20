@@ -100,12 +100,18 @@ func TestGHAttributionDefaultHost(t *testing.T) {
 
 func TestGHEnterprisePlaceholderTakesNoCalls(t *testing.T) {
 	c := model.Credential{Tool: "gh", ID: "enterprise", Kind: "env-token", Source: "env"}
-	own, _ := GHRule{}.Attribute(c, calls(2, "gh", "pr", ""), Context{})
-	if len(own) != 0 {
+	x := Context{Getenv: func(k string) string {
+		if k == "GH_HOST" {
+			return "enterprise"
+		}
+		return ""
+	}}
+	in := append(calls(2, "gh", "pr", ""), calls(1, "gh", "pr", "enterprise")...)
+	if own, _ := (GHRule{}).Attribute(c, in, x); len(own) != 0 {
 		t.Fatal(own)
 	}
-	c.Resolved = &model.Resolution{Scopes: []string{"repo"}, ScopesReadable: true}
-	if got := (GHRule{}).Risks(c, model.AgentState{}, ghUse("pr"), Context{}); len(got) != 0 {
+	c.Resolved = &model.Resolution{Scopes: []string{"repo", "gist"}, ScopesReadable: true}
+	if got := (GHRule{}).Risks(c, model.AgentState{}, ghUse("pr"), x); len(got) != 0 {
 		t.Fatalf("no URL or risk from placeholder: %+v", got)
 	}
 }

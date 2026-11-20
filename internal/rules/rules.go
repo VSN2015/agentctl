@@ -118,9 +118,10 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		return f
 	}
 	days := int(x.Window / (24 * time.Hour))
+	unreadable := c.ID == "unreadable" && c.Kind == "unknown"
 
 	var use AgentUse
-	if c.Kind == "unknown" { // placeholder: no host or profile to match calls against
+	if unreadable { // placeholder for a store that could not be read: no host or profile to match calls against
 		use = AgentUse{State: UseUnattributable, HistoryDays: x.HistoryDays}
 	} else {
 		own, un := rule.Attribute(c, a.Usage.Calls(c.Tool), x)
@@ -167,7 +168,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 			f.Details = append(f.Details, "Some agent history could not be read, so absence of use is not certain")
 		}
 	case UseUnattributable:
-		if c.Kind == "unknown" {
+		if unreadable {
 			f.Details = append(f.Details, "The credential could not be read, so its use cannot be attributed")
 		} else {
 			f.Details = append(f.Details, "Some agent calls could not be attributed to this credential")

@@ -44,7 +44,7 @@ func (r GHRule) Attribute(c model.Credential, calls []usage.Call, x Context) ([]
 
 func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Context) []Risk {
 	k := c.Resolved
-	if k == nil || c.Kind == "unknown" {
+	if k == nil || c.Kind == "unknown" || c.ID == "enterprise" {
 		return nil
 	}
 	if !k.ScopesReadable {
