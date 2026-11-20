@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iam v1.68.0
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
+	github.com/aws/smithy-go v1.28.9
 	github.com/spf13/cobra v1.10.2
 	go.yaml.in/yaml/v3 v3.0.6
 )
@@ -22,7 +23,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.14.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.39.5 // indirect
-	github.com/aws/smithy-go v1.28.9 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 )

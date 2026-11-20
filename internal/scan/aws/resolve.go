@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/aws/smithy-go"
+
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/scan"
 )
@@ -30,11 +32,11 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 		if errors.As(err, &skip) {
 			return nil, err
 		}
-		return nil, cleanErr("aws setup", err)
+		return nil, cleanErr("aws setup failed", err, false)
 	}
 	id, err := api.CallerIdentity(ctx)
 	if err != nil {
-		return nil, cleanErr("aws identity", err)
+		return nil, cleanErr("aws identity check failed", err, true)
 	}
 	r := &model.Resolution{Identity: id.ARN}
 	// before Policies: our own IAM calls may update the key's last-used record
@@ -51,7 +53,7 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 		r.AdminChecked, r.Admin, r.AdminWhy = true, true, "root account"
 	case "user", "role":
 		if ps, err := api.Policies(ctx, id); err != nil {
-			r.AdminWhy = "could not read policies: " + cleanErr("", err).Error()
+			r.AdminWhy = "could not read policies" + errCode(err)
 		} else {
 			r.AdminChecked = true
 			if r.Admin, r.AdminWhy = IsAdmin(ps); !r.Admin {
@@ -68,16 +70,22 @@ func reserved(name string) bool {
 	return name == "environment" || name == "chain" || name == "unreadable"
 }
 
-// cleanErr strips control characters and caps length so provider text cannot spoof the terminal.
-func cleanErr(prefix string, err error) error {
-	msg := []rune(model.Sanitize(err.Error()))
-	if len(msg) > 150 {
-		msg = append(msg[:150], '…')
+// errCode returns " (Code)" for an AWS API error and "" otherwise. SDK error text is never shown:
+// it can embed provider or credential-helper output.
+func errCode(err error) string {
+	var ae smithy.APIError
+	if errors.As(err, &ae) {
+		return " (" + model.Sanitize(ae.ErrorCode()) + ")"
 	}
-	if prefix == "" {
-		return errors.New(string(msg))
+	return ""
+}
+
+// cleanErr maps an SDK error to a fixed phrase, plus the API error code when withCode is set.
+func cleanErr(phrase string, err error, withCode bool) error {
+	if withCode {
+		phrase += errCode(err)
 	}
-	return errors.New(prefix + ": " + string(msg))
+	return errors.New(phrase)
 }
 
 var _ scan.Scanner = (*Scanner)(nil)

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/smithy-go"
+
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/scan"
 )
@@ -247,5 +249,43 @@ func TestResolveFallbackHonoursAWSDefaultProfile(t *testing.T) {
 		if !errors.As(err, &skip) || len(*profiles) != 0 {
 			t.Errorf("%s: err = %v, factory calls %v", name, err, *profiles)
 		}
+	}
+}
+
+// SDK error text can embed provider or helper output; only a fixed phrase and the API error code may be shown.
+type codedErr struct{ msg string }
+
+func (e codedErr) Error() string                 { return e.msg }
+func (e codedErr) ErrorCode() string             { return "AccessDenied" }
+func (e codedErr) ErrorMessage() string          { return e.msg }
+func (e codedErr) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
+
+func TestResolveNotesNeverCarrySDKErrorText(t *testing.T) {
+	leak := "parse failed of process output: " + canary
+	cases := map[string]struct {
+		f    *fakeAPI
+		want string
+	}{
+		"identity, plain error": {&fakeAPI{idErr: errors.New(leak)}, "aws identity check failed"},
+		"identity, api error":   {&fakeAPI{idErr: codedErr{leak}}, "aws identity check failed (AccessDenied)"},
+	}
+	for name, c := range cases {
+		s, creds, _ := scannerWith(t, c.f, basicConfig, basicKeys, nil)
+		_, err := s.Resolve(context.Background(), find(t, creds, "default"))
+		if err == nil || err.Error() != c.want {
+			t.Errorf("%s: err = %v, want %q", name, err, c.want)
+		}
+	}
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}, polErr: codedErr{leak}}
+	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
+	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
+	if err != nil || r.AdminWhy != "could not read policies (AccessDenied)" {
+		t.Errorf("policies: %+v %v", r, err)
+	}
+	// setup errors from the factory
+	s = New(func(context.Context, string) (API, error) { return nil, errors.New(leak) })
+	_, _ = s.Discover(env(fakeHome(t, basicConfig, basicKeys), nil))
+	if _, err := s.Resolve(context.Background(), model.Credential{ID: "default", Source: "file"}); err == nil || strings.Contains(err.Error(), canary) || err.Error() != "aws setup failed" {
+		t.Errorf("setup: %v", err)
 	}
 }
