@@ -44,6 +44,9 @@ func TestGHScopeTable(t *testing.T) {
 		unused string // "" means no risk
 	}{
 		{[]string{"workflow"}, []string{"run"}, ""},
+		{[]string{"repo", "workflow"}, []string{"run"}, ""},
+		{[]string{"public_repo", "repo_deployment", "repo:invite", "security_events"}, []string{"pr"}, ""},
+		{[]string{"repo", "workflow", "admin:org"}, []string{"pr", "pr", "pr"}, "workflow, admin:org"},
 		{[]string{"repo"}, []string{"issue", "repo", "release", "pr"}, ""},
 		{[]string{"gist", "repo"}, []string{"gist"}, "repo"},
 		{[]string{"read:org"}, []string{"org"}, ""},
@@ -100,15 +103,10 @@ func TestGHAttributionDefaultHost(t *testing.T) {
 
 func TestGHEnterprisePlaceholderTakesNoCalls(t *testing.T) {
 	c := model.Credential{Tool: "gh", ID: "enterprise", Kind: "env-token", Source: "env"}
-	x := Context{Getenv: func(k string) string {
-		if k == "GH_HOST" {
-			return "enterprise"
-		}
-		return ""
-	}}
+	x := Context{Getenv: func(string) string { return "" }}
 	in := append(calls(2, "gh", "pr", ""), calls(1, "gh", "pr", "enterprise")...)
-	if own, _ := (GHRule{}).Attribute(c, in, x); len(own) != 0 {
-		t.Fatal(own)
+	if own, un := (GHRule{}).Attribute(c, in, x); len(own) != 0 || un != 3 {
+		t.Fatal(own, un)
 	}
 	c.Resolved = &model.Resolution{Scopes: []string{"repo", "gist"}, ScopesReadable: true}
 	if got := (GHRule{}).Risks(c, model.AgentState{}, ghUse("pr"), x); len(got) != 0 {
@@ -124,5 +122,47 @@ func TestGHAdviceAndRevokeNone(t *testing.T) {
 	}
 	if s := (GHRule{}).Revoke(c, Context{}); s != "" {
 		t.Fatal(s)
+	}
+}
+
+func ghEngine(c model.Credential, u usage.Usage) model.Finding {
+	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
+	return run(c, agentIn(u), GHRule{})
+}
+
+func ghUsage(days, n int, target string) usage.Usage {
+	u := hist(days)
+	u.Shell = calls(n, "gh", "pr", target)
+	return u
+}
+
+func TestGHOtherHostCallsWithoutTargetAreUnattributable(t *testing.T) {
+	c := ghCred("ghe.corp.com", nil)
+	f := ghEngine(c, ghUsage(45, 40, ""))
+	if has(f.Rules, "usage.unused") || f.Severity != model.SevOK || has(f.Advice, "revoke") || len(f.Advice) != 0 || !has(f.Details, "could not be attributed") {
+		t.Fatalf("%+v", f)
+	}
+	if f := ghEngine(c, ghUsage(45, 3, "ghe.corp.com")); !strings.Contains(f.Headline, "used 3 times") {
+		t.Fatalf("own calls: %+v", f)
+	}
+	own, un := GHRule{}.Attribute(c, calls(2, "gh", "pr", ""), Context{})
+	if len(own) != 0 || un != 2 {
+		t.Fatal(own, un)
+	}
+	// default host still owns Target "" calls
+	own, un = GHRule{}.Attribute(ghCred("github.com", nil), calls(2, "gh", "pr", ""), Context{})
+	if len(own) != 2 || un != 0 {
+		t.Fatal(own, un)
+	}
+}
+
+func TestGHEnterprisePlaceholderUnattributableWhenCalls(t *testing.T) {
+	c := model.Credential{Tool: "gh", ID: "enterprise", Kind: "env-token", Source: "env"}
+	f := ghEngine(c, ghUsage(45, 5, ""))
+	if has(f.Rules, "usage.unused") || has(f.Advice, "revoke") || !has(f.Details, "could not be attributed") {
+		t.Fatalf("with calls: %+v", f)
+	}
+	if f := ghEngine(c, hist(45)); !has(f.Rules, "usage.unused") {
+		t.Fatalf("no gh calls at all stays unused: %+v", f)
 	}
 }

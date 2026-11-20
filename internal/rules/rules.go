@@ -145,7 +145,19 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	}
 
 	line := fmt.Sprintf("Agent use, last %d days: %d calls", days, use.Count)
-	if !use.Last.IsZero() {
+	headline := ""
+	switch {
+	case use.State == UseUnattributable:
+		line = fmt.Sprintf("Agent use, last %d days: cannot be attributed", days)
+		headline = fmt.Sprintf("use by %s cannot be attributed", a.Name)
+	case use.State == UseUnknown && a.Usage.Unread > 0:
+		line = fmt.Sprintf("Agent use: %d calls in the history that could be read", use.Count)
+		headline = fmt.Sprintf("%d calls by %s in the history that could be read", use.Count, a.Name)
+	case use.State == UseUnknown:
+		line = fmt.Sprintf("Agent use: %d calls in %d days of history", use.Count, use.HistoryDays)
+		headline = fmt.Sprintf("%d calls by %s in %d days of history", use.Count, a.Name, use.HistoryDays)
+	}
+	if !use.Last.IsZero() && use.State != UseUnattributable {
 		line += ", last " + use.Last.Format("2006-01-02")
 	}
 	f.Details = append(f.Details, line)
@@ -184,6 +196,9 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		} else {
 			f.Headline = fmt.Sprintf("rarely used by %s (%d calls in the last %d days)", a.Name, use.Count, days)
 		}
+	}
+	if f.Headline == "" && headline != "" {
+		f.Headline = headline
 	}
 	if f.Headline == "" {
 		f.Headline = fmt.Sprintf("used %d times by %s in the last %d days", use.Count, a.Name, days)

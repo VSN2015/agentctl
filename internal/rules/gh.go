@@ -12,34 +12,52 @@ type GHRule struct{}
 func (GHRule) Tool() string { return "gh" }
 
 // gh sub-command to the scope it needs.
-var ghScope = map[string]string{"run": "workflow", "issue": "repo", "repo": "repo", "release": "repo", "pr": "repo", "gist": "gist", "org": "read:org"}
+// gh run needs repo as well: reading Actions runs of a private repository needs it.
+var ghScope = map[string][]string{"run": {"repo", "workflow"}, "issue": {"repo"}, "repo": {"repo"}, "release": {"repo"}, "pr": {"repo"}, "gist": {"gist"}, "org": {"read:org"}}
 
 // implies lists what holding a scope also grants.
-var implies = map[string][]string{"admin:org": {"read:org", "write:org"}, "repo": {"repo:status"}}
+var implies = map[string][]string{"admin:org": {"read:org", "write:org"}, "repo": {"repo:status", "public_repo", "repo_deployment", "repo:invite", "security_events"}}
+
+func isPlaceholder(c model.Credential) bool {
+	return c.ID == "enterprise" && c.Kind == "env-token" && c.Source == "env"
+}
+
+func defaultHost(x Context) string {
+	if x.Getenv != nil && x.Getenv("GH_HOST") != "" {
+		return x.Getenv("GH_HOST")
+	}
+	return "github.com"
+}
 
 func (GHRule) targets(c model.Credential, x Context) []string {
 	if c.Kind == "unknown" || c.ID == "enterprise" {
 		return nil
 	}
-	def := "github.com"
-	if x.Getenv != nil && x.Getenv("GH_HOST") != "" {
-		def = x.Getenv("GH_HOST")
-	}
-	if c.ID == def {
+	if c.ID == defaultHost(x) {
 		return []string{c.ID, ""}
 	}
 	return []string{c.ID}
 }
 
+// Attribute: gh picks the host of repo commands from the git remote, so a call that
+// names no host can belong to any host but the default one; for those it is unattributable.
+// The enterprise placeholder's host is unknown, so every call may be its own.
 func (r GHRule) Attribute(c model.Credential, calls []usage.Call, x Context) ([]usage.Call, int) {
+	if isPlaceholder(c) {
+		return nil, len(calls)
+	}
 	var own []usage.Call
+	un := 0
 	t := r.targets(c, x)
 	for _, call := range calls {
-		if contains(t, call.Target) {
+		switch {
+		case contains(t, call.Target):
 			own = append(own, call)
+		case call.Target == "" && len(t) > 0:
+			un++
 		}
 	}
-	return own, 0
+	return own, un
 }
 
 func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Context) []Risk {
@@ -55,12 +73,14 @@ func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Cont
 	}
 	var needs []string
 	for _, call := range use.Calls {
-		s, ok := ghScope[call.Sub]
+		ss, ok := ghScope[call.Sub]
 		if !ok {
 			return []Risk{{Severity: model.SevOK, Details: []string{"Scope need cannot be attributed: the agent ran gh commands (such as gh api) that can use any scope, so unused scopes were not checked"}}}
 		}
-		if !contains(needs, s) {
-			needs = append(needs, s)
+		for _, s := range ss {
+			if !contains(needs, s) {
+				needs = append(needs, s)
+			}
 		}
 	}
 	var unused []string

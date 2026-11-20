@@ -203,8 +203,10 @@ func TestEngineUsageSeverity(t *testing.T) {
 	if f := run(a, agentIn(fakeUsage(45, 3)), r); f.Severity != model.SevOK || !strings.Contains(f.Headline, "used 3 times") {
 		t.Errorf("used: %+v", f)
 	}
-	f := run(a, agentIn(fakeUsage(10, 0)), r)
-	if f.Severity != model.SevOK || !has(f.Details, "10 days of history available") || len(f.Advice) != 0 {
+	f := run(a, agentIn(fakeUsage(10, 2)), r)
+	if f.Severity != model.SevOK || !has(f.Details, "10 days of history available") || len(f.Advice) != 0 ||
+		f.Headline != "2 calls by claude-code in 10 days of history" || !has(f.Details, "Agent use: 2 calls in 10 days of history") ||
+		has(f.Details, "last 30 days") || strings.Contains(f.Headline, "used 0") {
 		t.Errorf("short: %+v", f)
 	}
 }
@@ -258,7 +260,8 @@ func TestEngineUnknownKindIsUnattributable(t *testing.T) {
 	c := cred(model.AccessAllowed, false)
 	c.Kind, c.ID = "unknown", "unreadable"
 	f := run(c, agentIn(fakeUsage(45, 0)), r)
-	if f.Severity != model.SevOK || len(f.Advice) != 0 || !has(f.Details, "cannot be attributed") || has(f.Details, "unused") {
+	if f.Severity != model.SevOK || len(f.Advice) != 0 || !has(f.Details, "cannot be attributed") || has(f.Details, "unused") ||
+		f.Headline != "use by claude-code cannot be attributed" || !has(f.Details, "Agent use, last 30 days: cannot be attributed") {
 		t.Fatalf("%+v", f)
 	}
 }
@@ -267,7 +270,9 @@ func TestEngineUnreadHistoryNeverUnused(t *testing.T) {
 	u := fakeUsage(45, 0)
 	u.Unread = 2
 	f := run(cred(model.AccessAllowed, false), agentIn(u), &fakeRule{})
-	if f.Severity != model.SevOK || len(f.Advice) != 0 || !has(f.Details, "history could not be read") {
+	if f.Severity != model.SevOK || len(f.Advice) != 0 || !has(f.Details, "history could not be read") ||
+		f.Headline != "0 calls by claude-code in the history that could be read" || !has(f.Details, "Agent use: 0 calls in the history that could be read") ||
+		has(f.Details, "last 30 days") {
 		t.Fatalf("%+v", f)
 	}
 }
