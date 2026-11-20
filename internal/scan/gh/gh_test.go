@@ -140,10 +140,8 @@ func TestDiscoverEnvTokens(t *testing.T) {
 
 func TestDiscoverEmptyAndUnreadable(t *testing.T) {
 	for name, setup := range map[string]func(home string){
-		"no dir":    func(string) {},
-		"directory": func(h string) { _ = os.MkdirAll(filepath.Join(h, ".config", "gh", "hosts.yml"), 0o700) },
-		"empty":     func(h string) { writeHosts(t, filepath.Join(h, ".config"), "") },
-		"garbage":   func(h string) { writeHosts(t, filepath.Join(h, ".config"), "\x00\x01: [}{\n\t- :") },
+		"no dir": func(string) {},
+		"empty":  func(h string) { writeHosts(t, filepath.Join(h, ".config"), "") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
@@ -154,28 +152,95 @@ func TestDiscoverEmptyAndUnreadable(t *testing.T) {
 			}
 		})
 	}
+	for name, tc := range map[string]struct {
+		setup func(home string)
+		note  string
+	}{
+		"directory": {func(h string) { _ = os.MkdirAll(filepath.Join(h, ".config", "gh", "hosts.yml"), 0o700) }, "could not read hosts file"},
+		"garbage":   {func(h string) { writeHosts(t, filepath.Join(h, ".config"), "\x00\x01: [}{\n\t- :") }, "could not parse hosts file"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			tc.setup(home)
+			s := New(nil)
+			creds, err := s.Discover(envOf(home, nil))
+			if err != nil || len(creds) != 1 {
+				t.Fatalf("creds=%v err=%v", creds, err)
+			}
+			c := creds[0]
+			if c.ID != "unreadable" || c.Kind != "unknown" || c.Source != "file" || len(c.Files) != 1 || !reflect.DeepEqual(c.Notes, []string{tc.note}) {
+				t.Errorf("%+v", c)
+			}
+			_, err = s.Resolve(context.Background(), c)
+			var skip *scan.SkipError
+			if !errors.As(err, &skip) {
+				t.Errorf("resolve: %v", err)
+			}
+		})
+	}
+}
+
+func TestDiscoverEnterpriseEnvTokens(t *testing.T) {
+	home := t.TempDir()
+	vars := map[string]string{"GH_ENTERPRISE_TOKEN": canary}
+	// A: host in hosts.yml, no GH_HOST
+	writeHosts(t, filepath.Join(home, ".config"), "ghe.example.com:\n  user: bob\nacme.ghe.com:\n  user: c\ngithub.com:\n  user: a\n")
+	creds, _ := New(nil).Discover(envOf(home, vars))
+	for _, c := range creds {
+		want := map[string][]string{"ghe.example.com": {"GH_ENTERPRISE_TOKEN"}}[c.ID]
+		if !reflect.DeepEqual(c.EnvVars, want) {
+			t.Errorf("A %s: %v", c.ID, c.EnvVars)
+		}
+	}
+	// *.ghe.com takes GH_TOKEN
+	creds, _ = New(nil).Discover(envOf(home, map[string]string{"GITHUB_TOKEN": canary}))
+	for _, c := range creds {
+		want := map[string][]string{"github.com": {"GITHUB_TOKEN"}, "acme.ghe.com": {"GITHUB_TOKEN"}}[c.ID]
+		if !reflect.DeepEqual(c.EnvVars, want) {
+			t.Errorf("ghe.com %s: %v", c.ID, c.EnvVars)
+		}
+	}
+	// B: no host anywhere
+	home = t.TempDir()
+	s := New(nil)
+	creds, _ = s.Discover(envOf(home, vars))
+	if len(creds) != 1 {
+		t.Fatalf("B: %+v", creds)
+	}
+	c := creds[0]
+	if c.ID != "enterprise" || c.Kind != "env-token" || c.Source != "env" || !reflect.DeepEqual(c.EnvVars, []string{"GH_ENTERPRISE_TOKEN"}) ||
+		!reflect.DeepEqual(c.Notes, []string{"host unknown"}) || strings.Contains(fmt.Sprintf("%+v", c), canary) {
+		t.Errorf("B: %+v", c)
+	}
+	var skip *scan.SkipError
+	if _, err := s.Resolve(context.Background(), c); !errors.As(err, &skip) {
+		t.Errorf("B resolve: %v", err)
+	}
+	// a real host literally named "enterprise" keeps its name, is resolved, and no placeholder appears
+	home = t.TempDir()
+	writeHosts(t, filepath.Join(home, ".config"), "enterprise:\n  user: x\n")
+	f := &fakeRunner{out: []byte("HTTP/2.0 200 OK\n\r\n{\"login\":\"x\"}")}
+	s = New(f)
+	creds, _ = s.Discover(envOf(home, vars))
+	if len(creds) != 1 || creds[0].Kind != "file-host" || !reflect.DeepEqual(creds[0].EnvVars, []string{"GH_ENTERPRISE_TOKEN"}) {
+		t.Fatalf("named enterprise: %+v", creds)
+	}
+	if _, err := s.Resolve(context.Background(), creds[0]); err != nil || f.name != "gh" {
+		t.Errorf("named enterprise resolve: %v", err)
+	}
 }
 
 func TestDiscoverYAMLErrorsNeverEchoContent(t *testing.T) {
 	for _, body := range []string{"github.com: " + canary + "\n", "github.com:\n  user: [" + canary + "]\n"} {
 		home := t.TempDir()
 		writeHosts(t, filepath.Join(home, ".config"), body)
-		s := New(nil)
-		creds, err := s.Discover(envOf(home, nil))
-		if len(creds) != 0 {
-			t.Errorf("creds = %v", creds)
-		}
-		if err != nil {
-			t.Errorf("err = %v", err)
-		}
-		// notes ride on a credential only when one exists, so check an env credential carries the note
-		creds, err = s.Discover(envOf(home, map[string]string{"GH_TOKEN": "x"}))
+		creds, err := New(nil).Discover(envOf(home, nil))
 		out := fmt.Sprintf("%+v %v", creds, err)
 		if strings.Contains(out, canary) {
 			t.Errorf("canary leaked: %s", out)
 		}
-		if len(creds) != 1 || !reflect.DeepEqual(creds[0].Notes, []string{"could not parse hosts file"}) {
-			t.Errorf("notes: %+v", creds)
+		if err != nil || len(creds) != 1 || creds[0].ID != "unreadable" || !reflect.DeepEqual(creds[0].Notes, []string{"could not parse hosts file"}) {
+			t.Errorf("creds: %+v err %v", creds, err)
 		}
 	}
 }
@@ -201,11 +266,13 @@ func TestParseAPIResponse(t *testing.T) {
 		readable  bool
 		wantErr   bool
 	}{
-		{"scopes", "HTTP/2.0 200 OK\r\nX-Oauth-Scopes: repo, workflow, admin:org\r\nServer: x\r\n" + body, "alice", []string{"repo", "workflow", "admin:org"}, true, false},
-		{"empty header", "HTTP/2.0 200 OK\r\nX-Oauth-Scopes: \r\n" + body, "alice", []string{}, true, false},
-		{"absent", "HTTP/2.0 200 OK\r\nServer: x\r\n" + body, "alice", nil, false, false},
-		{"lower case", "HTTP/1.1 200 OK\r\nx-oauth-scopes: repo\r\n" + body, "alice", []string{"repo"}, true, false},
-		{"not json", "HTTP/2.0 200 OK\r\nX-Oauth-Scopes: repo\r\n\r\n<html>" + canary, "", nil, false, true},
+		{"scopes", "HTTP/2.0 200 OK\nX-Oauth-Scopes: repo, workflow, admin:org\r\nServer: x\r\n" + body, "alice", []string{"repo", "workflow", "admin:org"}, true, false},
+		{"empty header", "HTTP/2.0 200 OK\nX-Oauth-Scopes: \r\n" + body, "alice", []string{}, true, false},
+		{"absent", "HTTP/2.0 200 OK\nServer: x\r\n" + body, "alice", nil, false, false},
+		{"lower case", "HTTP/1.1 200 OK\nx-oauth-scopes: repo\r\n" + body, "alice", []string{"repo"}, true, false},
+		{"not json", "HTTP/2.0 200 OK\nX-Oauth-Scopes: repo\r\n\r\n<html>" + canary, "", nil, false, true},
+		{"scopes only header", "HTTP/2.0 200 OK\nX-Oauth-Scopes: repo\r\n" + body, "alice", []string{"repo"}, true, false},
+		{"no headers", "HTTP/2.0 200 OK\n" + body, "alice", nil, false, false},
 		{"no blank line", "HTTP/2.0 200 OK", "", nil, false, true},
 	}
 	for _, tc := range tests {
@@ -238,7 +305,7 @@ func (f *fakeRunner) Run(_ context.Context, name string, args []string, env []st
 }
 
 func TestResolveRunsExactlyOneReadOnlyCommand(t *testing.T) {
-	f := &fakeRunner{out: []byte("HTTP/2.0 200 OK\r\nX-Oauth-Scopes: repo\r\n\r\n{\"login\":\"bob\"}")}
+	f := &fakeRunner{out: []byte("HTTP/2.0 200 OK\nX-Oauth-Scopes: repo\r\n\r\n{\"login\":\"bob\"}")}
 	r, err := New(f).Resolve(context.Background(), model.Credential{Tool: "gh", ID: "ghe.example.com"})
 	if err != nil {
 		t.Fatal(err)
