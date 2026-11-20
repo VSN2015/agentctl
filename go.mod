@@ -1,4 +1,4 @@
-module github.com/OWNER/agentctl
+module github.com/VSN2015/agentctl
 
 go 1.24
 

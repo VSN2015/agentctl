@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OWNER/agentctl/internal/model"
-	"github.com/OWNER/agentctl/internal/scan"
+	"github.com/VSN2015/agentctl/internal/model"
+	"github.com/VSN2015/agentctl/internal/scan"
 )
 
 const canary = "CANARY-SECRET-DO-NOT-PRINT"

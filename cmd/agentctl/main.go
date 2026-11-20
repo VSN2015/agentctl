@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/OWNER/agentctl/internal/cli"
+	"github.com/VSN2015/agentctl/internal/cli"
 )
 
 func isTTY(f *os.File) bool {

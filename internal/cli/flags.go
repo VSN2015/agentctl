@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/OWNER/agentctl/internal/run"
+	"github.com/VSN2015/agentctl/internal/run"
 	"github.com/spf13/cobra"
 )
 
