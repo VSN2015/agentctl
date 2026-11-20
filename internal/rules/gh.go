@@ -60,6 +60,8 @@ func (r GHRule) Attribute(c model.Credential, calls []usage.Call, x Context) ([]
 	return own, un
 }
 
+const scopeUnattributable = "Scope need cannot be attributed: the agent ran gh commands (such as gh api) that can use any scope, so unused scopes were not checked"
+
 func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Context) []Risk {
 	k := c.Resolved
 	if k == nil || c.Kind == "unknown" || c.ID == "enterprise" {
@@ -71,11 +73,14 @@ func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Cont
 	if len(use.Calls) == 0 {
 		return nil
 	}
+	if use.Unattributed > 0 {
+		return []Risk{{Severity: model.SevOK, Details: []string{scopeUnattributable}}}
+	}
 	var needs []string
 	for _, call := range use.Calls {
 		ss, ok := ghScope[call.Sub]
 		if !ok {
-			return []Risk{{Severity: model.SevOK, Details: []string{"Scope need cannot be attributed: the agent ran gh commands (such as gh api) that can use any scope, so unused scopes were not checked"}}}
+			return []Risk{{Severity: model.SevOK, Details: []string{scopeUnattributable}}}
 		}
 		for _, s := range ss {
 			if !contains(needs, s) {

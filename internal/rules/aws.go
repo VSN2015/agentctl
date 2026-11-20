@@ -1,9 +1,9 @@
 package rules
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/usage"
@@ -14,22 +14,23 @@ type AWSRule struct{}
 func (AWSRule) Tool() string { return "aws" }
 
 // targets are the shell-invocation targets that belong to c: its profile name, plus
-// "" for the default profile, the environment and the chain.
-func (AWSRule) targets(c model.Credential) []string {
+// "" for the default profile, the profile the environment selects, the environment and the chain.
+// A call with no profile may be the agent's own AWS_PROFILE or the default; both lean toward "used".
+func (AWSRule) targets(c model.Credential, x Context) []string {
 	if c.Source != "file" {
 		return []string{""}
 	}
 	p := strings.TrimPrefix(c.ID, "profile:") // reserved words are stored as profile:<name>
-	if p == "default" {
+	if p == "default" || (x.Getenv != nil && p == cmp.Or(x.Getenv("AWS_PROFILE"), x.Getenv("AWS_DEFAULT_PROFILE"))) {
 		return []string{p, ""}
 	}
 	return []string{p}
 }
 
-func (r AWSRule) Attribute(c model.Credential, calls []usage.Call, _ Context) ([]usage.Call, int) {
+func (r AWSRule) Attribute(c model.Credential, calls []usage.Call, x Context) ([]usage.Call, int) {
 	var own []usage.Call
 	for _, call := range calls {
-		if contains(r.targets(c), call.Target) {
+		if contains(r.targets(c, x), call.Target) {
 			own = append(own, call)
 		}
 	}
@@ -67,7 +68,7 @@ func (AWSRule) Risks(c model.Credential, _ model.AgentState, _ AgentUse, _ Conte
 
 func (r AWSRule) DeveloperUse(c model.Credential, use AgentUse, x Context) DevUse {
 	dated := false
-	for _, t := range r.targets(c) {
+	for _, t := range r.targets(c, x) {
 		if u, ok := x.Dev.Lookup("aws", t); ok {
 			if u.Dated && x.Now.Sub(u.Last) <= x.Window {
 				return DevUse{DevKnownRecent, "found in dated shell history within the window"}
@@ -96,6 +97,6 @@ func (AWSRule) Revoke(c model.Credential, x Context) string {
 	if c.KeyID == "" {
 		return ""
 	}
-	return fmt.Sprintf(`Nobody used this key in the last %d days according to AWS. Revoke it at AWS (IAM console, or "aws iam update-access-key --status Inactive") for key %s.`,
-		int(x.Window/(24*time.Hour)), model.MaskKeyID(c.KeyID))
+	return fmt.Sprintf(`Nobody used this key in the last %s according to AWS. Revoke it at AWS (IAM console, or "aws iam update-access-key --status Inactive") for key %s.`,
+		windowText(x.Window), model.MaskKeyID(c.KeyID))
 }

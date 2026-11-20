@@ -117,7 +117,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		f.Headline = "denied by agent settings"
 		return f
 	}
-	days := int(x.Window / (24 * time.Hour))
+	span := windowText(x.Window)
 	unreadable := c.ID == "unreadable" && c.Kind == "unknown"
 
 	var use AgentUse
@@ -144,11 +144,11 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		}
 	}
 
-	line := fmt.Sprintf("Agent use, last %d days: %d calls", days, use.Count)
+	line := fmt.Sprintf("Agent use, last %s: %d calls", span, use.Count)
 	headline := ""
 	switch {
 	case use.State == UseUnattributable:
-		line = fmt.Sprintf("Agent use, last %d days: cannot be attributed", days)
+		line = fmt.Sprintf("Agent use, last %s: cannot be attributed", span)
 		headline = fmt.Sprintf("use by %s cannot be attributed", a.Name)
 	case use.State == UseUnknown && a.Usage.Unread > 0:
 		line = fmt.Sprintf("Agent use: %d calls in the history that could be read", use.Count)
@@ -192,16 +192,16 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	if usageSev > f.Severity {
 		f.Severity = usageSev
 		if usageSev == model.SevMed {
-			f.Headline = fmt.Sprintf("not used by %s in the last %d days", a.Name, days)
+			f.Headline = fmt.Sprintf("not used by %s in the last %s", a.Name, span)
 		} else {
-			f.Headline = fmt.Sprintf("rarely used by %s (%d calls in the last %d days)", a.Name, use.Count, days)
+			f.Headline = fmt.Sprintf("rarely used by %s (%d calls in the last %s)", a.Name, use.Count, span)
 		}
 	}
 	if f.Headline == "" && headline != "" {
 		f.Headline = headline
 	}
 	if f.Headline == "" {
-		f.Headline = fmt.Sprintf("used %d times by %s in the last %d days", use.Count, a.Name, days)
+		f.Headline = fmt.Sprintf("used %d times by %s in the last %s", use.Count, a.Name, span)
 	}
 
 	if usageSev > model.SevOK {

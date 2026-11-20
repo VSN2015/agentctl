@@ -155,3 +155,23 @@ func TestAWSEngineRevokeOnly(t *testing.T) {
 		t.Fatalf("%+v", f)
 	}
 }
+
+func TestAWSEmptyTargetCountsForEnvSelectedProfile(t *testing.T) {
+	attr := func(vars map[string]string, id string) int {
+		own, _ := AWSRule{}.Attribute(awsCred(id, nil), calls(10, "aws", "", ""),
+			Context{Getenv: func(k string) string { return vars[k] }})
+		return len(own)
+	}
+	for _, v := range []string{"AWS_PROFILE", "AWS_DEFAULT_PROFILE"} {
+		vars := map[string]string{v: "work"}
+		if attr(vars, "work") != 10 || attr(vars, "default") != 10 || attr(vars, "prod") != 0 {
+			t.Errorf("%s=work: work=%d default=%d prod=%d", v, attr(vars, "work"), attr(vars, "default"), attr(vars, "prod"))
+		}
+	}
+	if vars := map[string]string{"AWS_PROFILE": "a", "AWS_DEFAULT_PROFILE": "b"}; attr(vars, "a") != 10 || attr(vars, "b") != 0 {
+		t.Error("AWS_PROFILE wins over AWS_DEFAULT_PROFILE")
+	}
+	if attr(nil, "default") != 10 || attr(nil, "work") != 0 || attr(nil, "prod") != 0 {
+		t.Error("unset: default only")
+	}
+}

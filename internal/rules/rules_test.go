@@ -293,3 +293,56 @@ func TestEngineUnknownKindRealCredentialIsNormal(t *testing.T) {
 		t.Fatalf("%+v", f)
 	}
 }
+
+func TestAgentUseShortWindows(t *testing.T) {
+	short := func(h time.Duration) usage.Usage { return usage.Usage{HistoryStart: now.Add(-h)} }
+	cases := []struct {
+		name string
+		u    usage.Usage
+		w    time.Duration
+		want UseState
+	}{
+		{"12h window, no history", usage.Usage{}, 12 * time.Hour, UseUnknown},
+		{"1d12h window, 30h history", short(30 * time.Hour), 36 * time.Hour, UseUnknown},
+		{"12h window, 2 days history", hist(2), 12 * time.Hour, UseUnused},
+	}
+	for _, c := range cases {
+		if got := agentUse(c.u, nil, 0, c.w, now); got.State != c.want {
+			t.Errorf("%s: state %v, want %v", c.name, got.State, c.want)
+		}
+	}
+	// the window is spoken in hours when it is under a day; never "0 days"
+	cr := cred(model.AccessAllowed, false)
+	fs := Evaluate(Input{Creds: []model.Credential{cr}, Agents: []AgentInput{agentIn(hist(2))}, Now: now, Window: 12 * time.Hour}, []ToolRule{&fakeRule{}})
+	f := fs[0]
+	if !has(f.Rules, "usage.unused") || f.Headline != "not used by claude-code in the last 12 hours" || !has(f.Details, "Agent use, last 12 hours: 0 calls") {
+		t.Fatalf("%+v", f)
+	}
+	for _, s := range append(f.Details, f.Headline) {
+		if strings.Contains(s, "0 days") {
+			t.Errorf("0 days in %q", s)
+		}
+	}
+	if s := (AWSRule{}).Revoke(awsCred("prod", nil), Context{Window: 12 * time.Hour}); s != "" && strings.Contains(s, "0 days") {
+		t.Error(s)
+	}
+}
+
+func TestAgentUseUnattributedCallsBlockRare(t *testing.T) {
+	cases := []struct {
+		name  string
+		n, un int
+		want  UseState
+	}{
+		{"two own, many unattributed", 2, 200, UseUnattributable},
+		{"one own, one unattributed", 1, 1, UseUnattributable},
+		{"three own, unattributed", 3, 200, UseUsed},
+		{"two own, none unattributed", 2, 0, UseRare},
+	}
+	for _, c := range cases {
+		got := agentUse(hist(45), calls(c.n, "fake", "", ""), c.un, window, now)
+		if got.State != c.want || got.Unattributed != c.un {
+			t.Errorf("%s: %+v want state %v unattributed %d", c.name, got, c.want, c.un)
+		}
+	}
+}

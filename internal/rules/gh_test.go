@@ -166,3 +166,24 @@ func TestGHEnterprisePlaceholderUnattributableWhenCalls(t *testing.T) {
 		t.Fatalf("no gh calls at all stays unused: %+v", f)
 	}
 }
+
+func TestGHUnattributedCallsBlockRareAndScopeFinding(t *testing.T) {
+	c := ghCred("ghe.corp.com", &model.Resolution{Scopes: []string{"repo", "admin:org"}, ScopesReadable: true})
+	u := hist(45)
+	u.Shell = append(calls(2, "gh", "pr", "ghe.corp.com"), calls(200, "gh", "pr", "")...)
+	f := ghEngine(c, u)
+	if has(f.Rules, "usage.rare") || has(f.Rules, "gh.unused-scopes") || f.Severity != model.SevOK || len(f.Advice) != 0 ||
+		!has(f.Details, "could not be attributed") || !has(f.Details, "Scope need cannot be attributed") {
+		t.Fatalf("%+v", f)
+	}
+	// 3 or more own calls stay "used"; the scope check still stays off while calls are unattributed
+	u.Shell = append(calls(3, "gh", "pr", "ghe.corp.com"), calls(200, "gh", "pr", "")...)
+	f = ghEngine(c, u)
+	if !strings.Contains(f.Headline, "used 3 times") || has(f.Rules, "usage.rare") || has(f.Rules, "gh.unused-scopes") {
+		t.Fatalf("own calls >= 3: %+v", f)
+	}
+	got := GHRule{}.Risks(c, model.AgentState{}, AgentUse{Calls: calls(2, "gh", "pr", ""), Count: 2, Unattributed: 5, State: UseUnattributable}, Context{})
+	if len(got) != 1 || got[0].Rule != "" || !has(got[0].Details, "Scope need cannot be attributed") {
+		t.Fatalf("%+v", got)
+	}
+}
