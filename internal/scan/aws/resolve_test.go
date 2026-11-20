@@ -289,3 +289,19 @@ func TestResolveNotesNeverCarrySDKErrorText(t *testing.T) {
 		t.Errorf("setup: %v", err)
 	}
 }
+
+func TestResolveNotesEndpointOverride(t *testing.T) {
+	const note = "AWS endpoint override is set; online checks went to that endpoint"
+	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}}
+	for _, v := range []string{"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_STS", "AWS_ENDPOINT_URL_IAM"} {
+		s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, map[string]string{v: "https://example.invalid"})
+		r, err := s.Resolve(context.Background(), find(t, creds, "default"))
+		if err != nil || len(r.Notes) != 1 || r.Notes[0] != note {
+			t.Errorf("%s: notes %v err %v", v, r, err)
+		}
+	}
+	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, map[string]string{"AWS_ENDPOINT_URL_STS": ""})
+	if r, err := s.Resolve(context.Background(), find(t, creds, "default")); err != nil || len(r.Notes) != 0 {
+		t.Errorf("empty value: %+v %v", r, err)
+	}
+}

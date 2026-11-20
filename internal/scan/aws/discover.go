@@ -25,6 +25,8 @@ type Scanner struct {
 	api  APIFactory
 	keys map[string]string // credential ID -> raw access key id; never copied into model.Credential
 	skip map[string]bool   // credential IDs whose resolution could run a credential_process or prompt for MFA
+	// endpointOverride: an AWS_ENDPOINT_URL* variable sends online checks to a host we do not vouch for
+	endpointOverride bool
 }
 
 func New(api APIFactory) *Scanner {
@@ -42,6 +44,10 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		getenv = func(string) string { return "" }
 	}
 	s.keys, s.skip = map[string]string{}, map[string]bool{}
+	s.endpointOverride = false
+	for _, v := range []string{"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_STS", "AWS_ENDPOINT_URL_IAM"} {
+		s.endpointOverride = s.endpointOverride || getenv(v) != ""
+	}
 	var notes, failed []string
 	profiles := map[string]*profile{}
 	seen := map[string][]string{} // profile name -> files with a section for it, even a region-only one

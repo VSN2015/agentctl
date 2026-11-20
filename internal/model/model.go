@@ -62,6 +62,7 @@ type Resolution struct {
 	ScopesReadable     bool
 	KeyChecked         bool
 	KeyLastUsed        *time.Time // KeyChecked && nil => provider says never used
+	Notes              []string   // provider remarks about this resolution, shown with the credential
 	KeyLastUsedService string     // provider's service name for the last use, e.g. "sts"; a last use by "sts" or "iam" may be this tool's own check
 }
 

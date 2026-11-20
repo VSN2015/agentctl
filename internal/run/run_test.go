@@ -499,3 +499,21 @@ func TestResolveNotesDoNotAliasAcrossCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestResolutionNotesReachCredentialAndReport(t *testing.T) {
+	r := newRig()
+	r.sc.creds = []model.Credential{cred("fake", "a")}
+	r.sc.resolve = func(context.Context, model.Credential) (*model.Resolution, error) {
+		return &model.Resolution{Identity: "ok", Notes: []string{"endpoint override is set"}}, nil
+	}
+	rep, err := Collect(context.Background(), inventory(), r.deps())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := rep.Credentials[0].Notes; len(n) != 1 || n[0] != "endpoint override is set" {
+		t.Errorf("credential notes = %v", n)
+	}
+	if !strings.Contains(strings.Join(rep.Notes, "\n"), "endpoint override is set") {
+		t.Errorf("report notes = %v", rep.Notes)
+	}
+}

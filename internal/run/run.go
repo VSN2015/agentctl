@@ -135,6 +135,10 @@ func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Sca
 			addNote(rep, c.Label+": "+note)
 		default:
 			c.Resolved = res
+			for _, n := range res.Notes {
+				c.Notes = append(slices.Clip(c.Notes), n)
+				addNote(rep, c.Label+": "+n)
+			}
 		}
 	}
 	return nil

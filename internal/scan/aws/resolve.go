@@ -39,6 +39,9 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 		return nil, cleanErr("aws identity check failed", err, true)
 	}
 	r := &model.Resolution{Identity: id.ARN}
+	if s.endpointOverride {
+		r.Notes = []string{"AWS endpoint override is set; online checks went to that endpoint"}
+	}
 	// before Policies: our own IAM calls may update the key's last-used record
 	if key := s.keys[c.ID]; key != "" {
 		if u, err := api.AccessKeyLastUsed(ctx, key); err == nil {
