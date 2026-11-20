@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/VSN2015/agentctl/internal/run"
 )
@@ -70,7 +72,7 @@ func TestBuildDepsEmptyHomeReadsNothingFromCwd(t *testing.T) {
 	}
 	io, _, _ := newIO()
 	io.Cwd = cwd
-	d := buildDeps(run.Options{Command: "doctor"}, io)
+	d := buildDeps(context.Background(), run.Options{Command: "doctor"}, io)
 	if len(d.Agents) != 0 || len(d.Notes) != 1 || !strings.Contains(d.Notes[0], "home directory") {
 		t.Errorf("agents %d notes %v", len(d.Agents), d.Notes)
 	}
@@ -79,5 +81,29 @@ func TestBuildDepsEmptyHomeReadsNothingFromCwd(t *testing.T) {
 	}
 	if _, ok := d.Dev().Lookup("aws", ""); ok {
 		t.Error("history read from the current directory")
+	}
+}
+
+// a blocked read left behind at process exit is acceptable; the caller must not wait for it
+func TestCancellableConfirmReturnsPromptlyOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	block := make(chan struct{})
+	defer close(block)
+	done := make(chan error, 1)
+	go func() {
+		_, err := cancellable(ctx, func() (bool, error) { <-block; return true, nil })
+		done <- err
+	}()
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("confirm did not return after cancel")
+	}
+	if ok, err := cancellable(context.Background(), func() (bool, error) { return true, nil }); !ok || err != nil {
+		t.Errorf("normal answer: %v %v", ok, err)
 	}
 }

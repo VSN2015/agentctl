@@ -20,7 +20,7 @@ func e2eRun(t *testing.T, args ...string) (int, string, string) {
 	var out, errb bytes.Buffer
 	io := IO{In: strings.NewReader(""), Out: &out, Err: &errb, Getenv: h.Getenv, Home: h.Dir, Cwd: h.Dir}
 	exec := func(ctx context.Context, o run.Options, io IO) int {
-		d := buildDeps(o, io)
+		d := buildDeps(context.Background(), o, io)
 		d.Agents = registry.Agents(registry.AgentParams{Getenv: io.Getenv, Home: io.Home, Cwd: io.Cwd, GOOS: ""})
 		return run.Execute(ctx, o, d)
 	}

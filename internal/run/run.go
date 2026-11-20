@@ -47,6 +47,9 @@ func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 			return render.Report{}, err
 		}
 		ok, err := d.Confirm(providers)
+		if cerr := ctx.Err(); cerr != nil { // Ctrl-C at the prompt must not read as "no"
+			return render.Report{}, cerr
+		}
 		if err != nil {
 			if errors.Is(err, confirm.ErrNoTerminal) {
 				return render.Report{}, err

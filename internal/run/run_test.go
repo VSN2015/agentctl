@@ -467,3 +467,15 @@ func TestDiscoveryNotesReachReportOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectCancelledDuringConfirmAbortsEvenOnNo(t *testing.T) {
+	for _, answer := range []bool{false, true} {
+		r := newRig()
+		ctx, cancel := context.WithCancel(context.Background())
+		r.confirm = func([]string) (bool, error) { cancel(); return answer, nil }
+		_, err := Collect(ctx, doctor(), r.deps())
+		if !errors.Is(err, context.Canceled) || r.sc.resolved != 0 {
+			t.Errorf("answer %v: err %v resolved %d", answer, err, r.sc.resolved)
+		}
+	}
+}
