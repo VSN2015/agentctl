@@ -61,7 +61,8 @@ func fixedReport(cmd string) Report {
 			{ID: "agent-x:t2:other.example.com", Severity: model.SevMed, Agent: "agent-x", Tool: "t2", Subject: "other.example.com",
 				Headline: "token reachable", Details: []string{"credential file blocked, tool still allowed"}, FileBlocked: true},
 			{ID: "agent-x:t2:ghe.example.com", Severity: model.SevOK, Agent: "agent-x", Tool: "t2", Subject: "ghe.example.com",
-				Headline: "denied by agent settings", Access: model.AccessDenied},
+				Headline: "denied by agent settings", Access: model.AccessDenied,
+				Details: []string{"Permissions could not be read, so administrator access was not checked"}},
 		},
 		Notes: []string{"1 agent history files could not be read", "Prov1 profile x: online check skipped: needs login"},
 	}
@@ -211,5 +212,29 @@ func TestRenderEmptyHome(t *testing.T) {
 		if !strings.Contains(b.String(), "No credentials found.") || !strings.Contains(b.String(), "advisory") {
 			t.Errorf("%s:\n%s", cmd, b.String())
 		}
+	}
+}
+
+func TestRenderDoctorShowsDetailsOfOKFindings(t *testing.T) {
+	for name, st := range map[string]Style{"plain": {}, "tty": {Color: true, Fancy: true}} {
+		var b bytes.Buffer
+		if err := Text(&b, fixedReport("doctor"), st); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(b.String(), "      Permissions could not be read, so administrator access was not checked\n") {
+			t.Errorf("%s: OK finding detail missing:\n%s", name, b.String())
+		}
+	}
+}
+
+func TestRenderDoctorWithCredentialsButNoFindings(t *testing.T) {
+	r := fixedReport("doctor")
+	r.Findings = nil
+	var b bytes.Buffer
+	if err := Text(&b, r, Style{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "No findings.\n") || !strings.Contains(b.String(), "Note: 1 agent history") {
+		t.Errorf("got:\n%s", b.String())
 	}
 }

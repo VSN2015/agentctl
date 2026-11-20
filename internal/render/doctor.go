@@ -36,16 +36,19 @@ func (p *printer) heading(r Report, f model.Finding) string {
 }
 
 func (p *printer) doctor(r Report) {
+	if len(r.Findings) == 0 {
+		p.printf("No findings.\n")
+	}
 	for i, f := range r.Findings {
 		if i > 0 {
 			p.printf("\n")
 		}
 		if f.Severity == model.SevOK {
 			p.printf("%s%s %s %s\n", p.sevWord(f.Severity), p.heading(r, f), p.dash(), s(f.Headline))
-			continue
+		} else {
+			p.printf("%s%s\n", p.sevWord(f.Severity), p.heading(r, f))
+			p.printf("%s%s\n", indent, s(f.Headline))
 		}
-		p.printf("%s%s\n", p.sevWord(f.Severity), p.heading(r, f))
-		p.printf("%s%s\n", indent, s(f.Headline))
 		for _, d := range f.Details {
 			p.printf("%s%s\n", indent, s(d))
 		}

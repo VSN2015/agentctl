@@ -261,7 +261,9 @@
       "tool": "t2",
       "subject": "ghe.example.com",
       "headline": "denied by agent settings",
-      "details": [],
+      "details": [
+        "Permissions could not be read, so administrator access was not checked"
+      ],
       "advice": [],
       "access": "denied",
       "file_blocked": false

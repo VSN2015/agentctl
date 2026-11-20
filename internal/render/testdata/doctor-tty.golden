@@ -17,6 +17,7 @@
       credential file blocked, tool still allowed
 
 [32mOK[0m    Prov2 · ghe.example.com — denied by agent settings
+      Permissions could not be read, so administrator access was not checked
 
 Note: 1 agent history files could not be read
 Note: Prov1 profile x: online check skipped: needs login
