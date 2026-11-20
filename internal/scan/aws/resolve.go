@@ -17,7 +17,7 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 	case c.ID == "unreadable":
 		return nil, &scan.SkipError{Reason: "credential file could not be read"}
 	case s.skip[c.ID]:
-		return nil, &scan.SkipError{Reason: "resolving would run a credential process or prompt for MFA"}
+		return nil, &scan.SkipError{Reason: "resolving would run a credential process, prompt for MFA or refresh an aws login session"}
 	case c.Source == "file":
 		profile = c.ID
 		if rest, ok := strings.CutPrefix(profile, "profile:"); ok && reserved(rest) {
@@ -26,6 +26,10 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 	}
 	api, err := s.api(ctx, profile)
 	if err != nil {
+		var skip *scan.SkipError
+		if errors.As(err, &skip) {
+			return nil, err
+		}
 		return nil, cleanErr("aws setup", err)
 	}
 	id, err := api.CallerIdentity(ctx)

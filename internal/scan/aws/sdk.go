@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	"github.com/VSN2015/agentctl/internal/scan"
 )
 
 // Only Get* and List* calls may appear in these interfaces (enforced by a test).
@@ -60,6 +62,17 @@ func NewSDK() APIFactory {
 		cfg, err := config.LoadDefaultConfig(ctx, opts...)
 		if err != nil {
 			return nil, err
+		}
+		// The SDK's own view of where credentials would come from, taken before anything is
+		// retrieved: helper processes and `aws login` refreshes must never run from here.
+		if ps, ok := cfg.Credentials.(awssdk.CredentialProviderSource); ok {
+			for _, src := range ps.ProviderSources() {
+				switch src {
+				case awssdk.CredentialSourceProcess, awssdk.CredentialSourceProfileProcess,
+					awssdk.CredentialSourceLogin, awssdk.CredentialSourceProfileLogin:
+					return nil, &scan.SkipError{Reason: "resolving would run a credential process or refresh an aws login session"}
+				}
+			}
 		}
 		return &sdkAPI{sts: sts.NewFromConfig(cfg), iam: iam.NewFromConfig(cfg)}, nil
 	}

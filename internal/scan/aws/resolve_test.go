@@ -216,3 +216,36 @@ func TestResolveFallbackProfileOfChainIsChecked(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveSkipsLoginSessionProfiles(t *testing.T) {
+	cfg := "[profile lg]\nlogin_session = arn:aws:iam::1:user/u\nregion = us-east-1\n\n[profile hop]\nrole_arn = arn:aws:iam::1:role/r\nsource_profile = lg\n"
+	s, creds, profiles := scannerWith(t, &fakeAPI{}, cfg, "", nil)
+	if k := find(t, creds, "lg").Kind; k != "login" {
+		t.Errorf("kind = %q, want login", k)
+	}
+	for _, id := range []string{"lg", "hop"} {
+		_, err := s.Resolve(context.Background(), find(t, creds, id))
+		var skip *scan.SkipError
+		if !errors.As(err, &skip) {
+			t.Errorf("%s: err = %v, want SkipError", id, err)
+		}
+	}
+	if len(*profiles) != 0 {
+		t.Errorf("factory called: %v", *profiles)
+	}
+}
+
+func TestResolveFallbackHonoursAWSDefaultProfile(t *testing.T) {
+	cfg := "[profile p]\ncredential_process = /bin/true\n\n[profile lg]\nlogin_session = x\n"
+	for name, vars := range map[string]map[string]string{
+		"AWS_DEFAULT_PROFILE": {"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "AWS_DEFAULT_PROFILE": "p"},
+		"login via env":       {"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "AWS_PROFILE": "lg"},
+	} {
+		s, creds, profiles := scannerWith(t, &fakeAPI{}, cfg, "", vars)
+		_, err := s.Resolve(context.Background(), find(t, creds, "environment"))
+		var skip *scan.SkipError
+		if !errors.As(err, &skip) || len(*profiles) != 0 {
+			t.Errorf("%s: err = %v, factory calls %v", name, err, *profiles)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"cmp"
 	"errors"
 	"io/fs"
 	"os"
@@ -17,7 +18,7 @@ var keep = map[string]bool{
 	"aws_access_key_id": true, "aws_session_token": false, "aws_secret_access_key": false,
 	"role_arn": true, "source_profile": true, "credential_source": true,
 	"sso_session": true, "sso_start_url": true, "web_identity_token_file": true,
-	"credential_process": false, "mfa_serial": false,
+	"credential_process": false, "mfa_serial": false, "login_session": false,
 }
 
 type Scanner struct {
@@ -92,10 +93,8 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 			}
 		}
 	}
-	fallback := getenv("AWS_PROFILE") // the profile the SDK uses when nothing else is chosen
-	if fallback == "" {
-		fallback = "default"
-	}
+	// the profile the SDK uses when nothing else is chosen
+	fallback := cmp.Or(getenv("AWS_PROFILE"), getenv("AWS_DEFAULT_PROFILE"), "default")
 	cfg, crd := getenv("AWS_CONFIG_FILE"), getenv("AWS_SHARED_CREDENTIALS_FILE")
 	if cfg == "" && env.Home != "" {
 		cfg = filepath.Join(env.Home, ".aws", "config")
@@ -172,7 +171,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 }
 
 // prompts reports whether resolving the profile, or any profile reached through source_profile,
-// would run a credential_process or ask for an MFA code.
+// would run a credential_process, ask for an MFA code or refresh an `aws login` session.
 func prompts(profiles map[string]*profile, name string) bool {
 	for seen := map[string]bool{}; !seen[name]; {
 		seen[name] = true
@@ -180,7 +179,7 @@ func prompts(profiles map[string]*profile, name string) bool {
 		if p == nil {
 			return false
 		}
-		if p.keys["credential_process"] != "" || p.keys["mfa_serial"] != "" {
+		if p.keys["credential_process"] != "" || p.keys["mfa_serial"] != "" || p.keys["login_session"] != "" {
 			return true
 		}
 		name = p.keys["source_profile"]
@@ -192,6 +191,8 @@ func kindOf(k map[string]string) string {
 	switch {
 	case k["credential_process"] != "":
 		return "credential-process"
+	case k["login_session"] != "":
+		return "login"
 	case k["web_identity_token_file"] != "":
 		return "web-identity"
 	case k["role_arn"] != "":
