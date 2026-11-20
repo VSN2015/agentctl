@@ -54,14 +54,15 @@ type AgentState struct {
 }
 
 type Resolution struct {
-	Identity       string
-	AdminChecked   bool // Admin is meaningful only when AdminChecked; false means the policies could not be read (see AdminWhy)
-	Admin          bool
-	AdminWhy       string
-	Scopes         []string
-	ScopesReadable bool
-	KeyChecked     bool
-	KeyLastUsed    *time.Time // KeyChecked && nil => provider says never used
+	Identity           string
+	AdminChecked       bool // Admin is meaningful only when AdminChecked; false means the policies could not be read (see AdminWhy)
+	Admin              bool
+	AdminWhy           string
+	Scopes             []string
+	ScopesReadable     bool
+	KeyChecked         bool
+	KeyLastUsed        *time.Time // KeyChecked && nil => provider says never used
+	KeyLastUsedService string     // provider's service name for the last use, e.g. "sts"; a last use by "sts" or "iam" may be this tool's own check
 }
 
 type Finding struct {

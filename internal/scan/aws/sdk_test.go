@@ -5,10 +5,13 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 )
 
 func TestSDKInterfacesAreReadOnly(t *testing.T) {
@@ -89,5 +92,38 @@ func TestIdentityFromARN(t *testing.T) {
 		if got := identityFromARN(arn, "1"); got != want {
 			t.Errorf("%s: %+v, want %+v", arn, got, want)
 		}
+	}
+}
+
+type fakeKeyIAM struct {
+	iamAPI
+	use *types.AccessKeyLastUsed
+}
+
+func (f fakeKeyIAM) GetAccessKeyLastUsed(context.Context, *iam.GetAccessKeyLastUsedInput, ...func(*iam.Options)) (*iam.GetAccessKeyLastUsedOutput, error) {
+	return &iam.GetAccessKeyLastUsedOutput{AccessKeyLastUsed: f.use}, nil
+}
+
+func TestSDKAccessKeyLastUsedCarriesLowerCasedService(t *testing.T) {
+	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	a := &sdkAPI{iam: fakeKeyIAM{use: &types.AccessKeyLastUsed{LastUsedDate: &when, ServiceName: awssdk.String("STS")}}}
+	u, err := a.AccessKeyLastUsed(context.Background(), "k")
+	if err != nil || u == nil || !u.At.Equal(when) || u.Service != "sts" {
+		t.Fatalf("u=%+v err=%v", u, err)
+	}
+	a = &sdkAPI{iam: fakeKeyIAM{use: &types.AccessKeyLastUsed{ServiceName: awssdk.String("N/A")}}} // never used: no date
+	if u, err = a.AccessKeyLastUsed(context.Background(), "k"); err != nil || u != nil {
+		t.Fatalf("never used: u=%+v err=%v", u, err)
+	}
+}
+
+func TestSSOTokenRefreshIsDisabled(t *testing.T) {
+	var o ssocreds.SSOTokenProviderOptions
+	noRefresh(&o)
+	if o.Client == nil {
+		t.Fatal("no client set")
+	}
+	if _, err := o.Client.CreateToken(context.Background(), &ssooidc.CreateTokenInput{}); err == nil {
+		t.Fatal("CreateToken must fail")
 	}
 }
