@@ -209,13 +209,20 @@ func longLived(keyID string, hasToken bool) bool {
 	return !hasToken && !strings.HasPrefix(keyID, "ASIA")
 }
 
-// instanceRoleHint: sys_vendor "Amazon EC2" is sufficient but not necessary (Xen hosts differ).
+// instanceRoleHint is a hint, not proof: Nitro hosts report sys_vendor "Amazon EC2"; Xen hosts
+// (t2, m4, c4) report a hypervisor uuid starting "ec2" or a bios_version containing "amazon".
+// A host that shows none of these can still have an instance role. sysRoot is the /sys directory.
 func instanceRoleHint(sysRoot string) bool {
 	if sysRoot == "" {
-		sysRoot = "/sys/class/dmi/id"
+		sysRoot = "/sys"
 	}
-	b, err := os.ReadFile(filepath.Join(sysRoot, "sys_vendor"))
-	return err == nil && strings.Contains(string(b), "Amazon EC2")
+	has := func(rel string, ok func(string) bool) bool {
+		b, err := os.ReadFile(filepath.Join(sysRoot, rel))
+		return err == nil && ok(strings.ToLower(strings.TrimSpace(string(b))))
+	}
+	return has("class/dmi/id/sys_vendor", func(v string) bool { return strings.Contains(v, "amazon ec2") }) ||
+		has("hypervisor/uuid", func(v string) bool { return strings.HasPrefix(v, "ec2") }) ||
+		has("class/dmi/id/bios_version", func(v string) bool { return strings.Contains(v, "amazon") })
 }
 
 func contains(s []string, v string) bool {

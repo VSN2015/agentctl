@@ -159,10 +159,8 @@ func TestDiscoverChainTriggers(t *testing.T) {
 			t.Fatalf("%s: no chain", v)
 		}
 	}
-	sys := t.TempDir()
-	write(t, sys, "sys_vendor", "Amazon EC2\n")
 	e := env(home, nil)
-	e.SysRoot = sys
+	e.SysRoot = fakeSys(t, "class/dmi/id/sys_vendor", "Amazon EC2\n")
 	if _, ok := discover(t, e)["chain"]; !ok {
 		t.Fatal("ec2 hint: no chain")
 	}
@@ -278,5 +276,39 @@ func TestDiscoverReservedProfileName(t *testing.T) {
 	}
 	if s.keys[f.ID] != "AKIAAAAAAAAAAAAAAAAA" || s.keys[e.ID] != "AKIABBBBBBBBBBBBBBBB" {
 		t.Fatal("raw keys cross-wired")
+	}
+}
+
+// fakeSys builds a /sys tree holding one file.
+func fakeSys(t *testing.T, rel, body string) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, rel, body)
+	return root
+}
+
+func TestInstanceRoleHintCoversXenAndBiosVersion(t *testing.T) {
+	cases := []struct {
+		name, rel, body string
+		want            bool
+	}{
+		{"nitro vendor", "class/dmi/id/sys_vendor", "Amazon EC2\n", true},
+		{"xen hypervisor uuid", "hypervisor/uuid", "EC2E1916-9099-7CAF-FD21-012345ABCDEF\n", true},
+		{"xen hypervisor uuid lower case", "hypervisor/uuid", "ec2abcde-0000\n", true},
+		{"xen bios version", "class/dmi/id/bios_version", "4.11.AMAZON\n", true},
+		{"other hypervisor uuid", "hypervisor/uuid", "1234ec2\n", false},
+		{"other bios", "class/dmi/id/bios_version", "1.0 vbox\n", false},
+		{"xen vendor alone", "class/dmi/id/sys_vendor", "Xen\n", false},
+	}
+	for _, c := range cases {
+		if got := instanceRoleHint(fakeSys(t, c.rel, c.body)); got != c.want {
+			t.Errorf("%s: hint = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if instanceRoleHint(t.TempDir()) {
+		t.Error("empty sys tree gave a hint")
 	}
 }

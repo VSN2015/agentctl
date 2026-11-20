@@ -11,7 +11,7 @@ import (
 type Env struct {
 	Home    string
 	Getenv  func(string) string
-	SysRoot string // default "/sys/class/dmi/id"
+	SysRoot string // default "/sys"
 }
 
 // Runner runs an external command (read-only use only).
