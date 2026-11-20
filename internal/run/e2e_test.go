@@ -150,3 +150,18 @@ func TestE2EEmptyHome(t *testing.T) {
 		t.Errorf("exit %d out %q err %q", code, out, errb)
 	}
 }
+
+// The canary assertions above pass on empty output; these prove the scan actually found things.
+func TestE2EOfflineReportShowsWhatWasFound(t *testing.T) {
+	h := canaryhome.New(t, false)
+	_, inv, _, _ := runOnce(t, h, run.Options{Command: "inventory", Offline: true, Since: 720 * time.Hour}, false)
+	for _, want := range []string{canaryhome.MaskedID, "github.com - file-host", "Identity: octocat"} {
+		if !strings.Contains(inv, want) {
+			t.Errorf("inventory lacks %q:\n%s", want, inv)
+		}
+	}
+	_, doc, _, _ := runOnce(t, h, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour}, false)
+	if !strings.Contains(doc, "Agent use: 1 calls") || strings.Contains(doc, "AWS - default\n") && strings.Contains(doc, "Agent use: 0 calls") {
+		t.Errorf("doctor did not count the Claude Bash use of aws:\n%s", doc)
+	}
+}

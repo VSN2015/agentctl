@@ -15,10 +15,16 @@ const (
 	KeyID    = "AKIAIOSFODNN7EXAMPLE"
 	GHToken  = "ghp_CANARYTOKENDONOTPRINT0123456789"
 	MaskedID = "AKIA****MPLE"
+
+	// environment canaries: set in Home.Env, so they must never be printed either
+	EnvKeyID   = "AKIAZZZZZZZZZZZZENVK"
+	EnvSecret  = "CANARY-ENV-SECRET-KEY-DO-NOT-PRINT"
+	EnvSession = "CANARY-ENV-SESSION-TOKEN-DO-NOT-PRINT"
+	EnvGHToken = "ghp_CANARYENVTOKENDONOTPRINT0123456789"
 )
 
 // Secrets lists every value that must never appear in output.
-var Secrets = []string{Secret, KeyID, GHToken}
+var Secrets = []string{Secret, KeyID, GHToken, EnvKeyID, EnvSecret, EnvSession, EnvGHToken}
 
 type Home struct {
 	Dir string
@@ -62,5 +68,7 @@ func New(t testing.TB, unreadableAWS bool) Home {
 		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(dir, ".aws", "credentials"),
 		"GH_CONFIG_DIR":               filepath.Join(dir, "gh"), "XDG_CONFIG_HOME": filepath.Join(dir, "xdg"),
 		"HISTFILE": filepath.Join(dir, ".no_histfile"), "ZDOTDIR": dir,
+		"AWS_ACCESS_KEY_ID": EnvKeyID, "AWS_SECRET_ACCESS_KEY": EnvSecret, "AWS_SESSION_TOKEN": EnvSession,
+		"GH_TOKEN": EnvGHToken,
 	}}
 }
