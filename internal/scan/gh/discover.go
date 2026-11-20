@@ -35,12 +35,16 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	if getenv == nil {
 		getenv = func(string) string { return "" }
 	}
-	dir := filepath.Join(env.Home, ".config", "gh")
-	if v := getenv("XDG_CONFIG_HOME"); v != "" {
-		dir = filepath.Join(v, "gh")
-	}
-	if v := getenv("GH_CONFIG_DIR"); v != "" {
-		dir = v
+	// Precedence as gh itself: GH_CONFIG_DIR, XDG_CONFIG_HOME, then ~/.config. An unknown home
+	// must not turn into a path relative to the working directory (a cloned repo could plant one).
+	dir := ""
+	switch {
+	case getenv("GH_CONFIG_DIR") != "":
+		dir = getenv("GH_CONFIG_DIR")
+	case getenv("XDG_CONFIG_HOME") != "":
+		dir = filepath.Join(getenv("XDG_CONFIG_HOME"), "gh")
+	case env.Home != "":
+		dir = filepath.Join(env.Home, ".config", "gh")
 	}
 	path := filepath.Join(dir, "hosts.yml")
 	s.skip = map[string]bool{}
@@ -48,21 +52,28 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	var notes []string
 	byHost := map[string]*model.Credential{}
 	var order []string
-	if buf, err := os.ReadFile(path); err == nil {
-		var hosts map[string]hostEntry
-		if err := yaml.Unmarshal(buf, &hosts); err != nil { // never echo err: yaml quotes file content
-			notes, hosts = append(notes, "could not parse hosts file"), nil // yaml may return a partial map
+	failed := false // the hosts file exists but could not be used
+	switch {
+	case dir == "":
+		notes = append(notes, "hosts file skipped: no home directory")
+	case !filepath.IsAbs(dir):
+		notes = append(notes, "hosts file skipped: configuration directory is not an absolute path")
+	default:
+		if buf, err := os.ReadFile(path); err == nil {
+			var hosts map[string]hostEntry
+			if err := yaml.Unmarshal(buf, &hosts); err != nil { // never echo err: yaml quotes file content
+				notes, hosts, failed = append(notes, "could not parse hosts file"), nil, true // yaml may return a partial map
+			}
+			for h, e := range hosts {
+				byHost[h] = &model.Credential{Tool: "gh", ID: h, Label: model.Sanitize(h), Kind: "file-host",
+					Source: "file", Files: []string{path}, Identity: model.Sanitize(e.User)}
+				order = append(order, h)
+			}
+		} else if !os.IsNotExist(err) {
+			notes, failed = append(notes, "could not read hosts file"), true
 		}
-		for h, e := range hosts {
-			byHost[h] = &model.Credential{Tool: "gh", ID: h, Label: model.Sanitize(h), Kind: "file-host",
-				Source: "file", Files: []string{path}, Identity: model.Sanitize(e.User)}
-			order = append(order, h)
-		}
-	} else if !os.IsNotExist(err) {
-		notes = append(notes, "could not read hosts file")
 	}
 
-	fileFailed := len(notes) > 0
 	hosts := append([]string(nil), order...)
 	if h := getenv("GH_HOST"); h != "" {
 		hosts = append(hosts, h)
@@ -115,7 +126,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		placeholder(model.Credential{Tool: "gh", ID: "enterprise", Label: "enterprise", Kind: "env-token", Source: "env",
 			EnvVars: enterprise, Notes: []string{"host unknown"}})
 	}
-	if fileFailed && len(byHost) == 0 {
+	if failed && len(byHost) == 0 {
 		placeholder(model.Credential{Tool: "gh", ID: "unreadable", Label: "unreadable", Kind: "unknown", Source: "file", Files: []string{path}})
 	}
 

@@ -339,3 +339,51 @@ func TestResolveDegrades(t *testing.T) {
 		t.Errorf("non-zero exit: %v", err)
 	}
 }
+
+// A hosts file in the current directory must never be read when the home is unknown or a
+// configuration directory is relative.
+func TestDiscoverNeverReadsHostsFromWorkingDirectory(t *testing.T) {
+	cwd := t.TempDir()
+	writeHosts(t, filepath.Join(cwd, ".config"), "evil.example:\n  user: mallory\n")
+	t.Chdir(cwd)
+	for name, tc := range map[string]struct {
+		home string
+		vars map[string]string
+		note string
+	}{
+		"empty home":      {"", nil, "hosts file skipped: no home directory"},
+		"relative XDG":    {"", map[string]string{"XDG_CONFIG_HOME": ".config"}, "hosts file skipped: configuration directory is not an absolute path"},
+		"relative GH dir": {t.TempDir(), map[string]string{"GH_CONFIG_DIR": ".config/gh"}, "hosts file skipped: configuration directory is not an absolute path"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			vars := map[string]string{"GH_ENTERPRISE_TOKEN": "x"}
+			for k, v := range tc.vars {
+				vars[k] = v
+			}
+			creds, err := New(nil).Discover(envOf(tc.home, vars))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range creds {
+				if c.ID == "evil.example" {
+					t.Fatalf("hosts file of the working directory was read: %+v", c)
+				}
+				if !contains(c.Notes, tc.note) {
+					t.Errorf("%s: notes = %q, want %q", c.ID, c.Notes, tc.note)
+				}
+			}
+			if len(creds) == 0 {
+				t.Fatal("expected the enterprise placeholder to carry the note")
+			}
+		})
+	}
+}
+
+func contains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
