@@ -55,6 +55,7 @@ type AgentState struct {
 
 type Resolution struct {
 	Identity       string
+	AdminChecked   bool // Admin is meaningful only when AdminChecked; false means the policies could not be read (see AdminWhy)
 	Admin          bool
 	AdminWhy       string
 	Scopes         []string
