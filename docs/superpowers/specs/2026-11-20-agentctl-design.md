@@ -55,7 +55,7 @@ These would make the project a failure even if it works:
 - Online by default (owner's decision): `agentctl` uses the credentials already on the machine to ask each provider, read-only, what that credential can do. `--offline` disables all network access and reports only what the files show.
 - macOS and Linux, on laptops and on servers (owner's requirement). See "Running on servers".
 - Single binary, no runtime dependencies. Written in Go (owner's decision).
-- License Apache-2.0. **(call)**
+- License MIT (owner's choice: the GitHub repository was created with an MIT licence).
 
 ## Approaches considered
 
