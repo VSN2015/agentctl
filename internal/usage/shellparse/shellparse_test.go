@@ -22,6 +22,14 @@ func TestParseAWS(t *testing.T) {
 		{"bash -c 'aws s3 ls --profile prod'", []string{"prod"}},
 		{"echo $(aws sts get-caller-identity --profile dev)", []string{"dev"}},
 		{"aws s3 ls --profile a && aws s3 ls --profile b", []string{"a", "b"}},
+		{`aws s3 ls --profile "prod"`, []string{"prod"}},
+		{`AWS_PROFILE='prod' aws s3 ls`, []string{"prod"}},
+		{`export AWS_PROFILE="prod"; aws s3 ls`, []string{"prod"}},
+		{"aws sts get-caller-identity && aws s3 ls --profile prod", []string{"prod", ""}},
+		// accepted over-count: calls outnumber profile matches
+		{"export AWS_PROFILE=prod; aws a; aws b", []string{"prod", ""}},
+		{"aws s3 ls; aws s3 ls", []string{""}},
+		{"aws a --profile p && aws b --profile p", []string{"p"}},
 		{"awscli-wrapper x", nil},
 		{"naws x", nil},
 		{"paws", nil},
@@ -50,6 +58,10 @@ func TestParseGH(t *testing.T) {
 		{"gh --version", []Invocation{{"gh", "", ""}}},
 		{"GH_HOST=ghe.example.com gh issue list", []Invocation{{"gh", "issue", "ghe.example.com"}}},
 		{"gh pr list --hostname ghe.example.com", []Invocation{{"gh", "pr", "ghe.example.com"}}},
+		{`gh pr list --hostname "ghe.example.com"`, []Invocation{{"gh", "pr", "ghe.example.com"}}},
+		{"gh run list && gh pr list --hostname ghe.example.com", []Invocation{
+			{"gh", "run", "ghe.example.com"}, {"gh", "run", ""}, {"gh", "pr", "ghe.example.com"}, {"gh", "pr", ""}}},
+		{"GH_HOST=h gh pr list && gh run list --hostname h", []Invocation{{"gh", "pr", "h"}, {"gh", "run", "h"}}},
 		{"ghost x", nil},
 		{"gh pr list && gh run list", []Invocation{{"gh", "pr", ""}, {"gh", "run", ""}}},
 	}
