@@ -430,3 +430,40 @@ func TestStyleColourOnlyOnTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoveryNotesReachReportOnce(t *testing.T) {
+	for _, offline := range []bool{false, true} {
+		for _, cmd := range []string{"inventory", "doctor"} {
+			r := newRig()
+			a, b, c := cred("fake", "a"), cred("fake", "b"), cred("fake", "c")
+			a.Notes = []string{"could not read store"}
+			b.Notes = []string{"could not read store"}
+			c.Notes = []string{"own note"}
+			r.sc.creds = []model.Credential{a, b, c}
+			r.sc.resolve = func(_ context.Context, c model.Credential) (*model.Resolution, error) {
+				if c.ID == "a" {
+					return nil, errors.New("boom")
+				}
+				return &model.Resolution{}, nil
+			}
+			o := Options{Command: cmd, Offline: offline, Since: 30 * 24 * time.Hour}
+			rep, err := Collect(context.Background(), o, r.deps())
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"label a: could not read store", "label b: could not read store", "label c: own note"}
+			if !offline {
+				want = append(want, "label a: online check failed: boom")
+			}
+			if strings.Join(rep.Notes, "|") != strings.Join(want, "|") {
+				t.Errorf("%s offline=%v notes = %q, want %q", cmd, offline, rep.Notes, want)
+			}
+			r2 := newRig()
+			r2.sc.creds = []model.Credential{a, b, c}
+			Execute(context.Background(), Options{Command: cmd, Offline: true, Since: 24 * time.Hour}, r2.deps())
+			if !strings.Contains(r2.out.String(), "Note: label c: own note") {
+				t.Errorf("%s text lacks discovery note:\n%s", cmd, r2.out)
+			}
+		}
+	}
+}

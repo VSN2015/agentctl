@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/VSN2015/agentctl/internal/agent"
@@ -89,6 +90,9 @@ func discover(d Deps, rep *render.Report) (creds []model.Credential, owners []sc
 		}
 		for _, c := range found {
 			c.Provider = sc.Provider()
+			for _, n := range c.Notes {
+				addNote(rep, c.Label+": "+n)
+			}
 			creds, owners = append(creds, c), append(owners, sc)
 			if !seen[c.Provider] {
 				seen[c.Provider] = true
@@ -97,6 +101,13 @@ func discover(d Deps, rep *render.Report) (creds []model.Credential, owners []sc
 		}
 	}
 	return creds, owners, providers
+}
+
+// addNote adds a line to the report once; scanners may share one note across credentials.
+func addNote(rep *render.Report, line string) {
+	if !slices.Contains(rep.Notes, line) {
+		rep.Notes = append(rep.Notes, line)
+	}
 }
 
 func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Scanner, rep *render.Report) error {
@@ -118,7 +129,7 @@ func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Sca
 				note = "online check skipped: " + err.Error()
 			}
 			c.Notes = append(c.Notes, note)
-			rep.Notes = append(rep.Notes, c.Label+": "+note)
+			addNote(rep, c.Label+": "+note)
 		default:
 			c.Resolved = res
 		}
