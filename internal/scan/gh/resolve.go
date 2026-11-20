@@ -14,6 +14,9 @@ import (
 
 // Resolve runs one read-only `gh api user` call against the credential's host.
 func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resolution, error) {
+	if s.skip[c.ID] {
+		return nil, &scan.SkipError{Reason: "no host to query"}
+	}
 	out, err := s.run.Run(ctx, "gh", []string{"api", "-i", "--hostname", c.ID, "user"},
 		[]string{"GH_NO_UPDATE_NOTIFIER=1", "GH_PROMPT_DISABLED=1"})
 	if errors.Is(err, exec.ErrNotFound) {
@@ -32,12 +35,13 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 // ParseAPIResponse parses `gh api -i` output: status line, headers, blank line, JSON body.
 // A missing X-Oauth-Scopes header means scopes are not readable (e.g. fine-grained tokens).
 func ParseAPIResponse(raw []byte) (login string, scopes []string, scopesReadable bool, err error) {
-	head, body, ok := bytes.Cut(raw, []byte("\r\n\r\n"))
+	// gh prints the status line ending "\n", header lines ending "\r\n", then "\r\n" before the body.
+	head, body, ok := bytes.Cut(raw, []byte("\n\r\n"))
 	if !ok {
 		return "", nil, false, errors.New("unexpected gh api output")
 	}
-	for _, line := range strings.Split(string(head), "\r\n")[1:] {
-		name, val, found := strings.Cut(line, ":")
+	for _, line := range strings.Split(string(head), "\n")[1:] {
+		name, val, found := strings.Cut(strings.TrimSuffix(line, "\r"), ":")
 		if found && strings.EqualFold(strings.TrimSpace(name), "x-oauth-scopes") {
 			scopesReadable, scopes = true, []string{}
 			for _, s := range strings.Split(val, ",") {

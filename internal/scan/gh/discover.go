@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/scan"
@@ -13,9 +14,12 @@ import (
 
 const defaultHost = "github.com"
 
-type Scanner struct{ run scan.Runner }
+type Scanner struct {
+	run  scan.Runner
+	skip map[string]bool // placeholder credential IDs that Resolve must not query
+}
 
-func New(r scan.Runner) *Scanner { return &Scanner{run: r} }
+func New(r scan.Runner) *Scanner { return &Scanner{run: r, skip: map[string]bool{}} }
 
 func (s *Scanner) Name() string     { return "gh" }
 func (s *Scanner) Provider() string { return "GitHub" }
@@ -39,6 +43,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		dir = v
 	}
 	path := filepath.Join(dir, "hosts.yml")
+	s.skip = map[string]bool{}
 
 	var notes []string
 	byHost := map[string]*model.Credential{}
@@ -57,13 +62,21 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		notes = append(notes, "could not read hosts file")
 	}
 
-	addEnv := func(host string, names ...string) {
-		var set []string
+	fileFailed := len(notes) > 0
+	hosts := append([]string(nil), order...)
+	if h := getenv("GH_HOST"); h != "" {
+		hosts = append(hosts, h)
+	}
+	hosts = append(hosts, defaultHost)
+	setOf := func(names ...string) (set []string) {
 		for _, n := range names {
 			if getenv(n) != "" {
 				set = append(set, n)
 			}
 		}
+		return set
+	}
+	addEnv := func(host string, set []string) {
 		if len(set) == 0 {
 			return
 		}
@@ -75,16 +88,42 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		}
 		c.EnvVars = append(c.EnvVars, set...)
 	}
-	addEnv(defaultHost, "GH_TOKEN", "GITHUB_TOKEN")
-	if h := getenv("GH_HOST"); h != "" && h != defaultHost {
-		addEnv(h, "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+	enterprise := setOf("GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
+	seenHost, haveEnterpriseHost := map[string]bool{}, false
+	for _, h := range hosts {
+		if seenHost[h] {
+			continue
+		}
+		seenHost[h] = true
+		if h == defaultHost || strings.HasSuffix(h, ".ghe.com") || h == "github.localhost" {
+			addEnv(h, setOf("GH_TOKEN", "GITHUB_TOKEN"))
+		} else {
+			haveEnterpriseHost = true
+			addEnv(h, enterprise)
+		}
+	}
+	// A real host always keeps its name: placeholders are added only when the ID is free,
+	// and only placeholders added here are skipped by Resolve.
+	placeholder := func(c model.Credential) {
+		if byHost[c.ID] == nil {
+			byHost[c.ID] = &c
+			order = append(order, c.ID)
+			s.skip[c.ID] = true
+		}
+	}
+	if len(enterprise) > 0 && !haveEnterpriseHost {
+		placeholder(model.Credential{Tool: "gh", ID: "enterprise", Label: "enterprise", Kind: "env-token", Source: "env",
+			EnvVars: enterprise, Notes: []string{"host unknown"}})
+	}
+	if fileFailed && len(byHost) == 0 {
+		placeholder(model.Credential{Tool: "gh", ID: "unreadable", Label: "unreadable", Kind: "unknown", Source: "file", Files: []string{path}})
 	}
 
 	sort.Strings(order)
 	creds := make([]model.Credential, 0, len(order))
 	for _, h := range order {
 		c := *byHost[h]
-		c.Notes = notes
+		c.Notes = append(c.Notes, notes...)
 		creds = append(creds, c)
 	}
 	return creds, nil
