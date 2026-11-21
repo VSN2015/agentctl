@@ -58,7 +58,7 @@ func windowText(w time.Duration) string {
 	if w >= 24*time.Hour && w%(24*time.Hour) == 0 {
 		return plural(int(w/(24*time.Hour)), "day")
 	}
-	return plural(max(1, int((w+time.Hour-1)/time.Hour)), "hour")
+	return plural(WindowHours(w), "hour")
 }
 
 func plural(n int, unit string) string {
@@ -67,3 +67,6 @@ func plural(n int, unit string) string {
 	}
 	return fmt.Sprintf("%d %ss", n, unit)
 }
+
+// WindowHours is the window in whole hours, rounded up, at least 1; the same figure windowText speaks.
+func WindowHours(w time.Duration) int { return max(1, int((w+time.Hour-1)/time.Hour)) }

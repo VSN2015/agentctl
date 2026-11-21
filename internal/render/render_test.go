@@ -53,7 +53,7 @@ func fixedReport(cmd string) Report {
 		Findings: []model.Finding{
 			{ID: "agent-x:t1:profile:dev", Severity: model.SevHigh, Agent: "agent-x", Tool: "t1", Subject: "profile:dev",
 				Headline: "AdministratorAccess. Agent can reach it.", Details: []string{"Agent use, last 30 days: none"},
-				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block it from this credential.",
+				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS.",
 					"Block the agent: deny t1", "Agent deny rules are advisory unless the agent runs in a sandbox."}},
 			{ID: "agent-x:t1:profile:prod", Severity: model.SevHigh, Agent: "agent-x", Tool: "t1", Subject: "profile:prod",
 				Headline: "static key, permissions unknown offline", Details: []string{"Agent use, last 30 days: 2 calls"},

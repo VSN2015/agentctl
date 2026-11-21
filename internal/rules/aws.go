@@ -56,7 +56,7 @@ func (AWSRule) Risks(c model.Credential, _ model.AgentState, _ AgentUse, _ Conte
 				d = append(d, r.AdminWhy)
 			}
 			out = append(out, Risk{Rule: "aws.admin", Severity: model.SevHigh, Headline: "Credential has administrator access", Details: d,
-				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block it from this credential."},
+				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS."},
 				Block:  true})
 		case !r.AdminChecked:
 			out = append(out, Risk{Severity: model.SevOK, Details: []string{"Permissions could not be read, so administrator access was not checked"}})

@@ -232,3 +232,25 @@ func TestAWSDeniedCredentialGetsNoAdvice(t *testing.T) {
 		t.Fatalf("%+v", f)
 	}
 }
+
+func TestAWSAdviceWhenNobodyUsesTheKeyIsRevokeOnly(t *testing.T) {
+	for _, admin := range []bool{true, false} {
+		c := awsCred("prod", &model.Resolution{AdminChecked: true, Admin: admin, KeyChecked: true})
+		c.LongLived = !admin
+		c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
+		f := run(c, agentIn(hist(45)), AWSRule{})
+		if len(f.Advice) != 1 || !strings.Contains(f.Advice[0], "Revoke it at AWS") || (admin && !has(f.Rules, "aws.admin")) || (!admin && !has(f.Rules, "aws.long-lived-key")) {
+			t.Errorf("admin=%v: %+v", admin, f)
+		}
+	}
+}
+
+func TestAWSUnusedAdminDeveloperUsesIt(t *testing.T) {
+	recent := now.Add(-48 * time.Hour)
+	c := awsCred("prod", &model.Resolution{AdminChecked: true, Admin: true, KeyChecked: true, KeyLastUsed: &recent, KeyLastUsedService: "s3"})
+	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
+	f := run(c, agentIn(hist(45)), AWSRule{})
+	if len(f.Advice) != 3 || !has(f.Advice, "block the agent from AWS") || count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
+		t.Fatalf("%q", f.Advice)
+	}
+}

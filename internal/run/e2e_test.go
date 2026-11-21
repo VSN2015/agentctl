@@ -161,7 +161,7 @@ func TestE2EOfflineReportShowsWhatWasFound(t *testing.T) {
 		}
 	}
 	_, doc, _, _ := runOnce(t, h, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour}, false)
-	if !strings.Contains(doc, "AWS - default\n      Long-lived access key that does not expire\n      Agent use: 1 calls") {
+	if !strings.Contains(doc, "AWS - default\n      Long-lived access key that does not expire\n      Agent use: 1 call") {
 		t.Errorf("doctor did not count the Claude Bash use of aws:\n%s", doc)
 	}
 }

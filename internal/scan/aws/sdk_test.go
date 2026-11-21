@@ -143,7 +143,7 @@ func TestSDKFactorySkipsProcessCredentialsTheScannerMissed(t *testing.T) {
 	if err := os.Chmod(script, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := write(t, dir, "config", "[profile p]\ncredential_process: "+script+"\nregion = us-east-1\n")
+	cfg := write(t, dir, "config", "[profile p]\ncredential_process: "+script+"\nregion = us-east-1\n\n[profile q]\ncredential_process = /bin/false\n")
 	for k, v := range map[string]string{
 		"HOME": dir, "AWS_CONFIG_FILE": cfg, "AWS_SHARED_CREDENTIALS_FILE": filepath.Join(dir, "none"),
 		"AWS_PROFILE": "", "AWS_DEFAULT_PROFILE": "", "AWS_ACCESS_KEY_ID": "", "AWS_SECRET_ACCESS_KEY": "",
@@ -153,8 +153,8 @@ func TestSDKFactorySkipsProcessCredentialsTheScannerMissed(t *testing.T) {
 	}
 	s := New(NewSDK())
 	creds, err := s.Discover(env(dir, map[string]string{"AWS_CONFIG_FILE": cfg}))
-	if err != nil || s.skip["p"] {
-		t.Fatalf("layer 1 must miss this profile for the test to mean anything: skip=%v err=%v", s.skip["p"], err)
+	if err != nil || s.skip["p"] || !s.skip["q"] { // q (the "=" form, never resolved) proves the config was read
+		t.Fatalf("layer 1 must miss p and flag the control q for the test to mean anything: skip p=%v q=%v err=%v", s.skip["p"], s.skip["q"], err)
 	}
 	for _, c := range creds { // the reader finds no credential for it, so only the SDK-side check can stop the helper
 		if c.ID == "p" {

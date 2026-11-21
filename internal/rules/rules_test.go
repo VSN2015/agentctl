@@ -346,3 +346,24 @@ func TestAgentUseUnattributedCallsBlockRare(t *testing.T) {
 		}
 	}
 }
+
+func TestSingularCountsAndDays(t *testing.T) {
+	r := &fakeRule{}
+	f := run(cred(model.AccessAllowed, false), agentIn(fakeUsage(45, 1)), r)
+	if !has(f.Details, "Agent use, last 30 days: 1 call") || has(f.Details, "1 calls") {
+		t.Errorf("%q", f.Details)
+	}
+	u := usage.Usage{HistoryStart: now.Add(-24 * time.Hour), Shell: calls(1, "fake", "", "")}
+	f = run(cred(model.AccessAllowed, false), agentIn(u), r)
+	if !has(f.Details, "1 call in 1 day of history") || !has(f.Details, "1 day of history available") || strings.Contains(f.Headline, "1 calls") || strings.Contains(f.Headline, "1 days") {
+		t.Errorf("%q / %q", f.Details, f.Headline)
+	}
+}
+
+func TestWindowHoursRoundsUp(t *testing.T) {
+	for w, want := range map[time.Duration]int{30 * time.Minute: 1, 90 * time.Minute: 2, 12 * time.Hour: 12, 720 * time.Hour: 720} {
+		if got := WindowHours(w); got != want {
+			t.Errorf("%v: %d, want %d", w, got, want)
+		}
+	}
+}

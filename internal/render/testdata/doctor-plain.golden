@@ -1,7 +1,7 @@
 HIGH  Prov1 - profile dev
       AdministratorAccess. Agent can reach it.
       Agent use, last 30 days: none
-      -> The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block it from this credential.
+      -> The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS.
       -> Block the agent: deny t1
       -> Agent deny rules are advisory unless the agent runs in a sandbox.
 

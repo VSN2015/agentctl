@@ -147,18 +147,18 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		}
 	}
 
-	line := fmt.Sprintf("Agent use, last %s: %d calls", span, use.Count)
+	line := fmt.Sprintf("Agent use, last %s: %s", span, plural(use.Count, "call"))
 	headline := ""
 	switch {
 	case use.State == UseUnattributable:
 		line = fmt.Sprintf("Agent use, last %s: cannot be attributed", span)
 		headline = fmt.Sprintf("use by %s cannot be attributed", a.Name)
 	case use.State == UseUnknown && a.Usage.Unread > 0:
-		line = fmt.Sprintf("Agent use: %d calls in the history that could be read", use.Count)
-		headline = fmt.Sprintf("%d calls by %s in the history that could be read", use.Count, a.Name)
+		line = fmt.Sprintf("Agent use: %s in the history that could be read", plural(use.Count, "call"))
+		headline = fmt.Sprintf("%s by %s in the history that could be read", plural(use.Count, "call"), a.Name)
 	case use.State == UseUnknown:
-		line = fmt.Sprintf("Agent use: %d calls in %d days of history", use.Count, use.HistoryDays)
-		headline = fmt.Sprintf("%d calls by %s in %d days of history", use.Count, a.Name, use.HistoryDays)
+		line = fmt.Sprintf("Agent use: %s in %s of history", plural(use.Count, "call"), plural(use.HistoryDays, "day"))
+		headline = fmt.Sprintf("%s by %s in %s of history", plural(use.Count, "call"), a.Name, plural(use.HistoryDays, "day"))
 	}
 	if !use.Last.IsZero() && use.State != UseUnattributable {
 		line += ", last " + use.Last.Format("2006-01-02")
@@ -178,7 +178,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	case UseRare:
 		usageRule, usageSev = "usage.rare", model.SevLow
 	case UseUnknown:
-		f.Details = append(f.Details, fmt.Sprintf("%d days of history available", use.HistoryDays))
+		f.Details = append(f.Details, plural(use.HistoryDays, "day")+" of history available")
 		if a.Usage.Unread > 0 {
 			f.Details = append(f.Details, "Some agent history could not be read, so absence of use is not certain")
 		}
@@ -197,7 +197,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		if usageSev == model.SevMed {
 			f.Headline = fmt.Sprintf("not used by %s in the last %s", a.Name, span)
 		} else {
-			f.Headline = fmt.Sprintf("rarely used by %s (%d calls in the last %s)", a.Name, use.Count, span)
+			f.Headline = fmt.Sprintf("rarely used by %s (%s in the last %s)", a.Name, plural(use.Count, "call"), span)
 		}
 	}
 	if f.Headline == "" && headline != "" {
@@ -208,7 +208,11 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	}
 
 	if usageSev > model.SevOK {
-		f.Advice = append(f.Advice, usageAdvice(c, a, rule, use, x)...)
+		adv, revokeOnly := usageAdvice(c, a, rule, use, x)
+		if revokeOnly { // nobody uses the key: narrowing or replacing it is moot
+			f.Advice = nil
+		}
+		f.Advice = append(f.Advice, adv...)
 	} else if needBlock && a.BlockAdvice != nil { // usageAdvice already carries block advice when it ran
 		if block := a.BlockAdvice(c.Tool); block != "" {
 			f.Advice = append(f.Advice, block, advisory)
@@ -217,10 +221,10 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	return f
 }
 
-func usageAdvice(c model.Credential, a AgentInput, rule ToolRule, use AgentUse, x Context) []string {
+func usageAdvice(c model.Credential, a AgentInput, rule ToolRule, use AgentUse, x Context) (advice []string, revokeOnly bool) {
 	dev := rule.DeveloperUse(c, use, x)
 	if revoke := rule.Revoke(c, x); dev.State == DevNobody && use.State == UseUnused && revoke != "" {
-		return []string{revoke}
+		return []string{revoke}, true
 	}
 	var block string
 	if a.BlockAdvice != nil {
@@ -236,5 +240,5 @@ func usageAdvice(c model.Credential, a AgentInput, rule ToolRule, use AgentUse, 
 	if block != "" {
 		out = append(out, advisory)
 	}
-	return out
+	return out, false
 }

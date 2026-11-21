@@ -547,7 +547,7 @@ func TestCollectWindowDaysAndHours(t *testing.T) {
 	for _, c := range []struct {
 		since       time.Duration
 		days, hours int
-	}{{12 * time.Hour, 0, 12}, {30 * 24 * time.Hour, 30, 720}} {
+	}{{12 * time.Hour, 0, 12}, {30 * 24 * time.Hour, 30, 720}, {90 * time.Minute, 0, 2}, {30 * time.Minute, 0, 1}} {
 		rep, err := Collect(context.Background(), doctor(func(o *Options) { o.Since, o.Offline = c.since, true }), newRig().deps())
 		if err != nil {
 			t.Fatal(err)

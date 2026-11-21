@@ -16,7 +16,7 @@ type jsonReport struct {
 	Command       string           `json:"command"`
 	Offline       bool             `json:"offline"`
 	WindowDays    int              `json:"window_days"`
-	WindowHours   int              `json:"window_hours"`
+	WindowHours   int              `json:"window_hours"` // window_days is truncated; window_hours is rounded up, minimum 1
 	HistoryDays   int              `json:"history_days"`
 	HistoryUnread int              `json:"history_unread"`
 	Agents        []string         `json:"agents"`
