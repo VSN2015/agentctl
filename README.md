@@ -12,23 +12,22 @@ This is `agentctl doctor --offline` on a machine with one AWS profile and a `gh`
 
 ```text
 $ agentctl doctor --offline
-MED   AWS - staging
-      not used by claude-code in the last 30 days
-      Agent use, last 30 days: 0 calls
-      -> Block the agent: add "Bash(aws:*)" to permissions.deny in ~/.claude/settings.json
-      -> If you do not use it either, revoke the credential.
-      -> Agent deny rules are advisory unless the agent runs in a sandbox.
+agentctl doctor - 30 days - offline
 
-MED   shell
-      Agent can run any shell command without a restriction
-      Any credential on this machine is reachable through the shell, whatever the per-tool rules say
-      -> Restrict the agent's shell permissions to the commands it needs, or run it in a sandbox.
+SEV  TOOL    NAME        AGENT    USED 30d  CHECKED  ISSUE
+-----------------------------------------------------------------
+MED  AWS     staging     allowed  0         offline  unused
+MED  agent   shell       allowed  -         -        unrestricted
+OK   GitHub  github.com  allowed  41        offline  -
 
-OK    GitHub - github.com - used 41 times by claude-code in the last 30 days
-      Agent use, last 30 days: 41 calls, last 2026-11-20
+Fix
+  1  deny "Bash(aws:*)" in ~/.claude/settings.json
+  2  revoke a credential you do not use yourself
+  3  restrict the agent's shell, or use a sandbox
 
-Note: agent deny rules are advisory unless the agent runs in a sandbox.
-Note: launch flags (such as skipping all permission prompts) are not visible in configuration files and are not detected.
+Notes
+  deny rules are advisory without a sandbox
+  launch flags are not detected
 ```
 
 The picture at the top is abridged. A HIGH finding such as administrator access needs an online check, because only the provider knows what a credential can do.
