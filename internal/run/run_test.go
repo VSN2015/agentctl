@@ -54,7 +54,7 @@ func (fakeRule) Attribute(_ model.Credential, calls []usage.Call, _ rules.Contex
 	return calls, 0
 }
 func (r fakeRule) Risks(model.Credential, model.AgentState, rules.AgentUse, rules.Context) []rules.Risk {
-	return []rules.Risk{{Rule: "fake.risk", Severity: r.sev, Headline: "fake risk headline", Details: []string{"fake detail"}}}
+	return []rules.Risk{{Rule: "fake.risk", Severity: r.sev, Headline: "fake risk headline", Short: "fake risk", Details: []string{"fake detail"}}}
 }
 func (fakeRule) DeveloperUse(model.Credential, rules.AgentUse, rules.Context) rules.DevUse {
 	return rules.DevUse{State: rules.DevUnknown}
@@ -320,7 +320,7 @@ func TestExecuteFileBlockedStillRisky(t *testing.T) {
 	if code := Execute(context.Background(), doctor(), r.deps()); code != 1 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(r.out.String(), "credential file blocked, tool still allowed") || !strings.Contains(r.out.String(), "HIGH") {
+	if !strings.Contains(r.out.String(), "file blocked, tool allowed") || !strings.Contains(r.out.String(), "HIGH") {
 		t.Errorf("out %q", r.out)
 	}
 }
@@ -461,7 +461,8 @@ func TestDiscoveryNotesReachReportOnce(t *testing.T) {
 			r2 := newRig()
 			r2.sc.creds = []model.Credential{a, b, c}
 			Execute(context.Background(), Options{Command: cmd, Offline: true, Since: 24 * time.Hour}, r2.deps())
-			if !strings.Contains(r2.out.String(), "Note: label c: own note") {
+			wantNote := map[string]string{"doctor": "\n  label c: own note\n", "inventory": "Note: label c: own note"}[cmd]
+			if !strings.Contains(r2.out.String(), wantNote) {
 				t.Errorf("%s text lacks discovery note:\n%s", cmd, r2.out)
 			}
 		}

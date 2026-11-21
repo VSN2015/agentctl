@@ -53,12 +53,20 @@ func agentUse(u usage.Usage, calls []usage.Call, unattributed int, window time.D
 	return r
 }
 
-// windowText names the window for people: whole days, or hours when it is under a day or not a whole number of days.
-func windowText(w time.Duration) string {
+// WindowText names the window for people: whole days, or hours when it is under a day or not a whole number of days.
+func WindowText(w time.Duration) string {
 	if w >= 24*time.Hour && w%(24*time.Hour) == 0 {
 		return plural(int(w/(24*time.Hour)), "day")
 	}
 	return plural(WindowHours(w), "hour")
+}
+
+// ShortWindow is the window for a table header: "30d", or "12h" when it is not a whole number of days.
+func ShortWindow(w time.Duration) string {
+	if w >= 24*time.Hour && w%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", int(w/(24*time.Hour)))
+	}
+	return fmt.Sprintf("%dh", WindowHours(w))
 }
 
 func plural(n int, unit string) string {

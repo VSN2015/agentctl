@@ -72,6 +72,8 @@ type jsonFinding struct {
 	Advice      []string `json:"advice"`
 	Access      string   `json:"access"`
 	FileBlocked bool     `json:"file_blocked"`
+	Issue       string   `json:"issue"`
+	Used        string   `json:"used"`
 }
 
 func list(v []string) []string {
@@ -97,7 +99,7 @@ func JSON(w io.Writer, r Report) error {
 	for _, f := range r.Findings {
 		out.Findings = append(out.Findings, jsonFinding{
 			ID: f.ID, Rules: list(f.Rules), Severity: f.Severity.String(), Agent: f.Agent, Tool: f.Tool, Subject: f.Subject,
-			Headline: f.Headline, Details: list(f.Details), Advice: list(f.Advice), Access: string(f.Access), FileBlocked: f.FileBlocked})
+			Headline: f.Headline, Details: list(f.Details), Advice: list(f.Advice), Access: string(f.Access), FileBlocked: f.FileBlocked, Issue: f.Issue, Used: f.Used})
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

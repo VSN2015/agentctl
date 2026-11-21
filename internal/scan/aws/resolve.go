@@ -40,7 +40,11 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 	}
 	id, err := api.CallerIdentity(ctx)
 	if err != nil {
-		return &model.Resolution{Notes: r.Notes}, cleanErr("aws identity check failed", err, true)
+		phrase := "aws identity check failed"
+		if c.Kind == "sso" {
+			return &model.Resolution{Notes: r.Notes}, cleanErr(phrase, err, true, ` (for SSO, run "aws sso login")`)
+		}
+		return &model.Resolution{Notes: r.Notes}, cleanErr(phrase, err, true)
 	}
 	r.Identity = id.ARN
 	// before Policies: our own IAM calls may update the key's last-used record
@@ -86,11 +90,11 @@ func errCode(err error) string {
 }
 
 // cleanErr maps an SDK error to a fixed phrase, plus the API error code when withCode is set.
-func cleanErr(phrase string, err error, withCode bool) error {
+func cleanErr(phrase string, err error, withCode bool, hint ...string) error {
 	if withCode {
 		phrase += errCode(err)
 	}
-	return errors.New(phrase)
+	return errors.New(phrase + strings.Join(hint, ""))
 }
 
 var _ scan.Scanner = (*Scanner)(nil)

@@ -206,8 +206,10 @@
         "Block the agent: deny t1",
         "Agent deny rules are advisory unless the agent runs in a sandbox."
       ],
-      "access": "",
-      "file_blocked": false
+      "access": "allowed",
+      "file_blocked": false,
+      "issue": "admin, unused",
+      "used": "0"
     },
     {
       "id": "agent-x:t1:profile:prod",
@@ -223,8 +225,10 @@
       "advice": [
         "Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role."
       ],
-      "access": "",
-      "file_blocked": false
+      "access": "allowed",
+      "file_blocked": false,
+      "issue": "long-lived key",
+      "used": "2"
     },
     {
       "id": "agent-x:t2:github.com",
@@ -240,8 +244,10 @@
       "advice": [
         "Replace the token"
       ],
-      "access": "",
-      "file_blocked": false
+      "access": "asks",
+      "file_blocked": false,
+      "issue": "extra scopes",
+      "used": "12"
     },
     {
       "id": "agent-x:t2:other.example.com",
@@ -255,8 +261,10 @@
         "credential file blocked, tool still allowed"
       ],
       "advice": [],
-      "access": "",
-      "file_blocked": true
+      "access": "allowed",
+      "file_blocked": true,
+      "issue": "file blocked, tool allowed",
+      "used": "3?"
     },
     {
       "id": "agent-x:t2:ghe.example.com",
@@ -271,7 +279,9 @@
       ],
       "advice": [],
       "access": "denied",
-      "file_blocked": false
+      "file_blocked": false,
+      "issue": "",
+      "used": ""
     }
   ],
   "notes": [

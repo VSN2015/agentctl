@@ -52,16 +52,16 @@ func fixedReport(cmd string) Report {
 		},
 		Findings: []model.Finding{
 			{ID: "agent-x:t1:profile:dev", Severity: model.SevHigh, Agent: "agent-x", Tool: "t1", Subject: "profile:dev",
-				Headline: "AdministratorAccess. Agent can reach it.", Details: []string{"Agent use, last 30 days: none"},
+				Headline: "AdministratorAccess. Agent can reach it.", Access: model.AccessAllowed, Issue: "admin, unused", Used: "0", Details: []string{"Agent use, last 30 days: none"},
 				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS.",
 					"Block the agent: deny t1", "Agent deny rules are advisory unless the agent runs in a sandbox."}},
 			{ID: "agent-x:t1:profile:prod", Severity: model.SevHigh, Agent: "agent-x", Tool: "t1", Subject: "profile:prod",
-				Headline: "static key, permissions unknown offline", Details: []string{"Agent use, last 30 days: 2 calls"},
+				Headline: "static key, permissions unknown offline", Access: model.AccessAllowed, Issue: "long-lived key", Used: "2", Details: []string{"Agent use, last 30 days: 2 calls"},
 				Advice: []string{"Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role."}},
 			{ID: "agent-x:t2:github.com", Severity: model.SevMed, Agent: "agent-x", Tool: "t2", Subject: "github.com",
-				Headline: "unused scopes", Details: []string{"Scopes: repo, workflow"}, Advice: []string{"Replace the token"}},
+				Headline: "unused scopes", Access: model.AccessAsks, Issue: "extra scopes", Used: "12", Details: []string{"Scopes: repo, workflow"}, Advice: []string{"Replace the token"}},
 			{ID: "agent-x:t2:other.example.com", Severity: model.SevMed, Agent: "agent-x", Tool: "t2", Subject: "other.example.com",
-				Headline: "token reachable", Details: []string{"credential file blocked, tool still allowed"}, FileBlocked: true},
+				Headline: "token reachable", Access: model.AccessAllowed, Issue: "file blocked, tool allowed", Used: "3?", Details: []string{"credential file blocked, tool still allowed"}, FileBlocked: true},
 			{ID: "agent-x:t2:ghe.example.com", Severity: model.SevOK, Agent: "agent-x", Tool: "t2", Subject: "ghe.example.com",
 				Headline: "denied by agent settings", Access: model.AccessDenied,
 				Details: []string{"Permissions could not be read, so administrator access was not checked"}},
@@ -84,7 +84,7 @@ func TestRenderGolden(t *testing.T) {
 						t.Fatalf("%s plain output has byte %#x", cmd, c)
 					}
 				}
-			} else if !strings.Contains(b.String(), "·") || (cmd == "doctor" && (!strings.Contains(b.String(), "→") || !strings.Contains(b.String(), "\x1b["))) {
+			} else if !strings.Contains(b.String(), "·") || (cmd == "doctor" && !strings.Contains(b.String(), "\x1b[")) {
 				t.Errorf("%s tty lacks fancy marks:\n%s", cmd, b.String())
 			}
 			golden(t, cmd+"-"+name+".golden", b.Bytes())
@@ -217,18 +217,6 @@ func TestRenderEmptyHome(t *testing.T) {
 	}
 }
 
-func TestRenderDoctorShowsDetailsOfOKFindings(t *testing.T) {
-	for name, st := range map[string]Style{"plain": {}, "tty": {Color: true, Fancy: true}} {
-		var b bytes.Buffer
-		if err := Text(&b, fixedReport("doctor"), st); err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(b.String(), "      Permissions could not be read, so administrator access was not checked\n") {
-			t.Errorf("%s: OK finding detail missing:\n%s", name, b.String())
-		}
-	}
-}
-
 func TestRenderDoctorWithCredentialsButNoFindings(t *testing.T) {
 	r := fixedReport("doctor")
 	r.Findings = nil
@@ -236,7 +224,7 @@ func TestRenderDoctorWithCredentialsButNoFindings(t *testing.T) {
 	if err := Text(&b, r, Style{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(b.String(), "No findings.\n") || !strings.Contains(b.String(), "Note: 1 agent history") {
+	if !strings.Contains(b.String(), "No findings.\n") || !strings.Contains(b.String(), "  1 agent history") {
 		t.Errorf("got:\n%s", b.String())
 	}
 }

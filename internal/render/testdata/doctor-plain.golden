@@ -1,28 +1,21 @@
-HIGH  Prov1 - profile dev
-      AdministratorAccess. Agent can reach it.
-      Agent use, last 30 days: none
-      -> The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS.
-      -> Block the agent: deny t1
-      -> Agent deny rules are advisory unless the agent runs in a sandbox.
+agentctl doctor - 30 days - online
 
-HIGH  Prov1 - profile prod
-      static key, permissions unknown offline
-      Agent use, last 30 days: 2 calls
-      -> Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role.
+SEV   TOOL   NAME               AGENT    USED 30d  CHECKED  ISSUE
+--------------------------------------------------------------------------------------
+HIGH  Prov1  profile dev        allowed  0         yes      admin, unused
+HIGH  Prov1  profile prod       allowed  2         no       long-lived key
+MED   Prov2  github.com         asks     12        yes      extra scopes
+MED   Prov2  other.example.com  allowed  3?        no       file blocked, tool allowed
+OK    Prov2  ghe.example.com    denied   -         yes      -
 
-MED   Prov2 - github.com
-      unused scopes
-      Scopes: repo, workflow
-      -> Replace the token
+Fix
+  1  The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS.
+  2  Block the agent: deny t1
+  3  Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role.
+  4  Replace the token
 
-MED   Prov2 - other.example.com
-      token reachable
-      credential file blocked, tool still allowed
-
-OK    Prov2 - ghe.example.com - denied by agent settings
-      Permissions could not be read, so administrator access was not checked
-
-Note: 1 agent history files could not be read
-Note: Prov1 profile x: online check skipped: needs login
-Note: agent deny rules are advisory unless the agent runs in a sandbox.
-Note: launch flags (such as skipping all permission prompts) are not visible in configuration files and are not detected.
+Notes
+  1 agent history files could not be read
+  Prov1 profile x: online check skipped: needs login
+  deny rules are advisory without a sandbox
+  launch flags are not detected

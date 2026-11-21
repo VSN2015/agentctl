@@ -78,4 +78,6 @@ type Finding struct {
 	Advice      []string
 	Access      AgentAccess
 	FileBlocked bool
+	Issue       string // short label for the table: the risks and the usage state, joined by ", "; "" when none
+	Used        string // agent calls in the window as a table cell: "3", "3?" (not certain), "?" (cannot be attributed); "" when not about a credential
 }

@@ -37,7 +37,7 @@ func (a *claudeAgent) Classify(c model.Credential) model.AgentState {
 }
 
 func (a *claudeAgent) BlockAdvice(tool string) string {
-	return `Block the agent: add "Bash(` + tool + `:*)" to permissions.deny in ~/.claude/settings.json`
+	return `deny "Bash(` + tool + `:*)" in ~/.claude/settings.json`
 }
 
 func (a *claudeAgent) Posture() agent.Posture {

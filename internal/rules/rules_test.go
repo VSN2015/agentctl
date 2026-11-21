@@ -153,7 +153,7 @@ func TestEngineAsksFirstShownNotDowngraded(t *testing.T) {
 }
 
 func TestEngineAdviceBranches(t *testing.T) {
-	const reminder = "If you do not use it either, revoke the credential."
+	const reminder = "revoke a credential you do not use yourself"
 	cases := []struct {
 		name   string
 		r      *fakeRule
