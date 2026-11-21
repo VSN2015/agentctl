@@ -152,11 +152,16 @@ func TestSDKFactorySkipsProcessCredentialsTheScannerMissed(t *testing.T) {
 		t.Setenv(k, v)
 	}
 	s := New(NewSDK())
-	e := env(dir, nil)
-	if _, err := s.Discover(e); err != nil || s.skip["p"] {
+	creds, err := s.Discover(env(dir, map[string]string{"AWS_CONFIG_FILE": cfg}))
+	if err != nil || s.skip["p"] {
 		t.Fatalf("layer 1 must miss this profile for the test to mean anything: skip=%v err=%v", s.skip["p"], err)
 	}
-	_, err := s.Resolve(context.Background(), model.Credential{Tool: "aws", ID: "p", Source: "file"})
+	for _, c := range creds { // the reader finds no credential for it, so only the SDK-side check can stop the helper
+		if c.ID == "p" {
+			t.Fatalf("hand-written reader now sees the colon form: %+v", c)
+		}
+	}
+	_, err = s.Resolve(context.Background(), model.Credential{Tool: "aws", ID: "p", Source: "file"})
 	var skip *scan.SkipError
 	if !errors.As(err, &skip) {
 		t.Fatalf("err = %v, want SkipError", err)
