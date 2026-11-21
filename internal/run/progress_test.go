@@ -58,7 +58,7 @@ func TestProgressClearedBeforeConfirm(t *testing.T) {
 	r, d, _ := twoCreds()
 	var errAtConfirm string
 	r.confirm = func([]string) (bool, error) { errAtConfirm = r.errb.String(); return true, nil }
-	d.Progress = NewProgress(r.errb)
+	d.Progress = newProgress(r.errb, nil)
 	if code := Execute(context.Background(), inventory(), d); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
@@ -69,7 +69,7 @@ func TestProgressClearedBeforeConfirm(t *testing.T) {
 
 func TestExecuteProgressEnabledKeepsStdoutAndEndsCleared(t *testing.T) {
 	r, d, _ := twoCreds()
-	d.Progress = NewProgress(r.errb)
+	d.Progress = newProgress(r.errb, nil)
 	if code := Execute(context.Background(), doctor(), d); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
@@ -91,7 +91,7 @@ func TestExecuteProgressEnabledKeepsStdoutAndEndsCleared(t *testing.T) {
 func TestProgressClearedBeforeErrorLine(t *testing.T) {
 	r, d, _ := twoCreds()
 	r.confirm = func([]string) (bool, error) { return false, confirm.ErrNoTerminal }
-	d.Progress = NewProgress(r.errb)
+	d.Progress = newProgress(r.errb, nil)
 	if code := Execute(context.Background(), doctor(), d); code != 2 {
 		t.Fatalf("exit %d", code)
 	}
@@ -101,7 +101,7 @@ func TestProgressClearedBeforeErrorLine(t *testing.T) {
 	r, d, _ = twoCreds()
 	ctx, cancel := context.WithCancel(context.Background())
 	r.confirm = func([]string) (bool, error) { cancel(); return true, nil }
-	d.Progress = NewProgress(r.errb)
+	d.Progress = newProgress(r.errb, nil)
 	if code := Execute(ctx, doctor(), d); code != 2 {
 		t.Fatalf("exit %d", code)
 	}
@@ -127,6 +127,15 @@ func TestSpinnerFramesAndReplace(t *testing.T) {
 	want += clearSeq
 	if b.String() != want {
 		t.Errorf("got %q\nwant %q", b.String(), want)
+	}
+	b.Reset() // a tick, then a new message: both interleavings end on the next frame with the new text
+	p = newProgress(&b, tick)
+	p("one")
+	tick <- time.Time{}
+	p("two")
+	p("")
+	if g := b.String(); !strings.HasSuffix(g, clearSeq+"⠙ two"+clearSeq) {
+		t.Errorf("tick then replace: %q", g)
 	}
 	b.Reset() // a new message redraws at once with the new text, same frame
 	p = newProgress(&b, tick)
