@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="672" viewBox="0 0 1200 672" role="img" aria-labelledby="title desc">
+  <title id="title">agentctl: see what your AI coding agent can reach on this machine</title>
+  <desc id="desc">The project name and description above an abridged example of agentctl doctor output: a HIGH finding for an AWS profile with administrator access, a MED finding for an AWS profile the agent has not used, and an OK finding for a GitHub host the agent uses.</desc>
+
+  <defs>
+    <clipPath id="term-clip">
+      <rect x="40" y="296" width="1120" height="336" rx="14"/>
+    </clipPath>
+    <linearGradient id="fade" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#14181e" stop-opacity="0"/>
+      <stop offset="1" stop-color="#14181e" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="672" rx="22" fill="#0d1014"/>
+
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+    <text x="56" y="76" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="2" fill="#8b929c">READ-ONLY · LOCAL · NO TELEMETRY</text>
+    <text x="1144" y="76" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="1" fill="#8b929c">Claude Code · AWS · GitHub</text>
+    <text x="52" y="172" font-size="92" font-weight="800" letter-spacing="-2" fill="#ece9e2">agentctl</text>
+    <text x="56" y="222" font-size="27" fill="#ece9e2">See which credentials your AI coding agent can reach on this machine,</text>
+    <text x="56" y="258" font-size="27" fill="#8b929c">how much it really uses them, and what to tighten.</text>
+  </g>
+
+  <g id="doctor-output">
+    <rect x="40" y="296" width="1120" height="336" rx="14" fill="#14181e" stroke="#262c35" stroke-width="2"/>
+    <g clip-path="url(#term-clip)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20">
+      <text x="72" y="344" fill="#8b929c">$ <tspan fill="#ece9e2">agentctl doctor</tspan></text>
+
+      <text x="72" y="392" font-weight="700" fill="#f0605a">HIGH</text>
+      <text x="140" y="392" fill="#ece9e2">AWS · prod</text>
+      <text x="140" y="423" fill="#b9bdc4">Credential has administrator access</text>
+      <text x="140" y="454" fill="#b9bdc4">→ The agent should not work with administrator rights: give it a profile with only the permissions it needs</text>
+
+      <text x="72" y="502" font-weight="700" fill="#e0a82e">MED</text>
+      <text x="140" y="502" fill="#ece9e2">AWS · staging</text>
+      <text x="140" y="533" fill="#b9bdc4">not used by claude-code in the last 30 days</text>
+      <text x="140" y="564" fill="#b9bdc4">→ Block the agent: add "Bash(aws:*)" to permissions.deny in ~/.claude/settings.json</text>
+
+      <text x="72" y="612" font-weight="700" fill="#5fb760">OK</text>
+      <text x="140" y="612" fill="#ece9e2">GitHub · github.com <tspan fill="#b9bdc4">— used 41 times by claude-code in the last 30 days</tspan></text>
+
+      <rect x="1020" y="434" width="138" height="30" fill="url(#fade)"/>
+    </g>
+  </g>
+</svg>
