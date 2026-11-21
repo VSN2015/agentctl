@@ -34,6 +34,24 @@ type Deps struct {
 	Confirm  func(providers []string) (bool, error) // may return confirm.ErrNoTerminal
 	Out, Err io.Writer                              // used by Execute only; Collect never touches them
 	OutIsTTY bool
+	Progress func(msg string) // nil means none; "" clears the line. Execute and Collect only call it
+}
+
+// NewProgress writes progress to w, one rewritten line with no newline; "" clears the line.
+func NewProgress(w io.Writer) func(string) {
+	return func(msg string) {
+		if msg == "" {
+			fmt.Fprint(w, "\r\x1b[2K")
+			return
+		}
+		fmt.Fprint(w, "\r\x1b[2Kagentctl: "+model.Sanitize(msg)+"…") // labels come from files
+	}
+}
+
+func (d Deps) progress(msg string) {
+	if d.Progress != nil {
+		d.Progress(msg)
+	}
 }
 
 // Collect gathers everything and returns it as data: no printing, no exit status.
@@ -42,11 +60,13 @@ func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 	rep := render.Report{SchemaVersion: 1, GeneratedAt: now, Command: o.Command, Offline: o.Offline,
 		WindowDays: int(o.Since / (24 * time.Hour)), WindowHours: rules.WindowHours(o.Since), Agents: []string{}, Notes: append([]string{}, d.Notes...)}
 
+	d.progress("finding credentials")
 	creds, owners, providers := discover(d, &rep)
 	if !o.Offline && len(providers) > 0 {
 		if err := ctx.Err(); err != nil {
 			return render.Report{}, err
 		}
+		d.progress("") // the prompt must not share a line with progress
 		ok, err := d.Confirm(providers)
 		if cerr := ctx.Err(); cerr != nil { // Ctrl-C at the prompt must not read as "no"
 			return render.Report{}, cerr
@@ -63,7 +83,7 @@ func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 		}
 	}
 	if !rep.Offline && len(creds) > 0 {
-		if err := resolveAll(ctx, creds, owners, &rep); err != nil {
+		if err := resolveAll(ctx, d, creds, owners, &rep); err != nil {
 			return render.Report{}, err
 		}
 	}
@@ -114,12 +134,13 @@ func addNote(rep *render.Report, line string) {
 	}
 }
 
-func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Scanner, rep *render.Report) error {
+func resolveAll(ctx context.Context, d Deps, creds []model.Credential, owners []scan.Scanner, rep *render.Report) error {
 	for i := range creds {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		c := &creds[i]
+		d.progress(fmt.Sprintf("checking %s %s (%d/%d)", c.Provider, c.Label, i+1, len(creds)))
 		rctx, cancel := context.WithTimeout(ctx, resolveTimeout)
 		res, err := owners[i].Resolve(rctx, *c)
 		cancel()
@@ -150,6 +171,7 @@ func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Sca
 func evaluate(ctx context.Context, o Options, d Deps, now time.Time, rep *render.Report) error {
 	since := now.Add(-o.Since)
 	in := rules.Input{Creds: rep.Credentials, Getenv: d.Env.Getenv, Now: now, Window: o.Since, Offline: rep.Offline}
+	d.progress("reading agent history")
 	unread := 0
 	noHistory, shortDays := false, math.MaxInt
 	for _, a := range d.Agents {
@@ -168,6 +190,7 @@ func evaluate(ctx context.Context, o Options, d Deps, now time.Time, rep *render
 		}
 	}
 	if d.Dev != nil {
+		d.progress("reading shell history")
 		in.Dev = d.Dev()
 	}
 	if noHistory {
@@ -201,6 +224,7 @@ func agentInput(a agent.Agent, u usage.Usage) rules.AgentInput {
 // Execute is Collect, then render, then an exit status: 0, 1 (doctor found a HIGH finding) or 2.
 func Execute(ctx context.Context, o Options, d Deps) int {
 	rep, err := Collect(ctx, o, d)
+	d.progress("") // nothing may stay on screen or precede an error line
 	if err != nil {
 		switch {
 		case errors.Is(err, confirm.ErrNoTerminal):

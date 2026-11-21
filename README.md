@@ -102,7 +102,7 @@ A profile that would need a browser login, an MFA code, or a renewed session is 
 | 1 | `doctor` found at least one HIGH finding |
 | 2 | error, usage mistake, or no terminal without `--yes`/`--offline` |
 
-The report goes to standard output, including its per-source notes (for example "could not read"). Only the prompt, cancellation, and run or usage errors go to standard error. With `--json`, standard output carries only the JSON document.
+The report goes to standard output, including its per-source notes (for example "could not read"). Only the prompt, cancellation, and run or usage errors go to standard error, plus, on a terminal, a one-line progress status that is shown while it works and removed before the report. With `--json`, standard output carries only the JSON document.
 
 On a terminal the output is coloured with symbols. When piped or redirected (for example over `ssh ... | cat`) it is plain ASCII.
 
