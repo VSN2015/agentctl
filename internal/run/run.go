@@ -39,7 +39,7 @@ type Deps struct {
 func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 	now := d.Now()
 	rep := render.Report{SchemaVersion: 1, GeneratedAt: now, Command: o.Command, Offline: o.Offline,
-		WindowDays: int(o.Since / (24 * time.Hour)), Agents: []string{}, Notes: append([]string{}, d.Notes...)}
+		WindowDays: int(o.Since / (24 * time.Hour)), WindowHours: int(o.Since / time.Hour), Agents: []string{}, Notes: append([]string{}, d.Notes...)}
 
 	creds, owners, providers := discover(d, &rep)
 	if !o.Offline && len(providers) > 0 {

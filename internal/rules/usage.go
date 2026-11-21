@@ -56,7 +56,14 @@ func agentUse(u usage.Usage, calls []usage.Call, unattributed int, window time.D
 // windowText names the window for people: whole days, or hours when it is under a day or not a whole number of days.
 func windowText(w time.Duration) string {
 	if w >= 24*time.Hour && w%(24*time.Hour) == 0 {
-		return fmt.Sprintf("%d days", int(w/(24*time.Hour)))
+		return plural(int(w/(24*time.Hour)), "day")
 	}
-	return fmt.Sprintf("%d hours", max(1, int((w+time.Hour-1)/time.Hour)))
+	return plural(max(1, int((w+time.Hour-1)/time.Hour)), "hour")
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
 }

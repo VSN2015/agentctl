@@ -29,7 +29,7 @@ func state(a string, access model.AgentAccess, blocked bool) []model.AgentState 
 
 func fixedReport(cmd string) Report {
 	return Report{
-		SchemaVersion: 1, GeneratedAt: *at("2026-03-01T12:00:00Z"), Command: cmd, WindowDays: 30, HistoryDays: 45, HistoryUnread: 1,
+		SchemaVersion: 1, GeneratedAt: *at("2026-03-01T12:00:00Z"), Command: cmd, WindowDays: 30, WindowHours: 720, HistoryDays: 45, HistoryUnread: 1,
 		Agents: []string{"agent-x"},
 		Credentials: []model.Credential{
 			{Tool: "t1", ID: "profile:prod", Label: "profile prod", Kind: "static key", Provider: "Prov1", Source: "file",

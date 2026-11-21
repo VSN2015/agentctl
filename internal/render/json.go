@@ -16,6 +16,7 @@ type jsonReport struct {
 	Command       string           `json:"command"`
 	Offline       bool             `json:"offline"`
 	WindowDays    int              `json:"window_days"`
+	WindowHours   int              `json:"window_hours"`
 	HistoryDays   int              `json:"history_days"`
 	HistoryUnread int              `json:"history_unread"`
 	Agents        []string         `json:"agents"`
@@ -86,7 +87,7 @@ func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 func JSON(w io.Writer, r Report) error {
 	out := jsonReport{
 		SchemaVersion: r.SchemaVersion, GeneratedAt: rfc3339(r.GeneratedAt), Command: r.Command, Offline: r.Offline,
-		WindowDays: r.WindowDays, HistoryDays: r.HistoryDays, HistoryUnread: r.HistoryUnread,
+		WindowDays: r.WindowDays, WindowHours: r.WindowHours, HistoryDays: r.HistoryDays, HistoryUnread: r.HistoryUnread,
 		Agents: list(r.Agents), Notes: list(r.Notes),
 		Credentials: make([]jsonCredential, 0, len(r.Credentials)), Findings: make([]jsonFinding, 0, len(r.Findings)),
 	}

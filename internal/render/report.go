@@ -15,6 +15,7 @@ type Report struct {
 	Command       string
 	Offline       bool
 	WindowDays    int
+	WindowHours   int
 	HistoryDays   int
 	HistoryUnread int // agent history items that could not be read
 	Agents        []string

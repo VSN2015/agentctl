@@ -542,3 +542,18 @@ func TestFailedResolveKeepsItsOwnNotesOnce(t *testing.T) {
 		t.Errorf("report notes = %v", rep.Notes)
 	}
 }
+
+func TestCollectWindowDaysAndHours(t *testing.T) {
+	for _, c := range []struct {
+		since       time.Duration
+		days, hours int
+	}{{12 * time.Hour, 0, 12}, {30 * 24 * time.Hour, 30, 720}} {
+		rep, err := Collect(context.Background(), doctor(func(o *Options) { o.Since, o.Offline = c.since, true }), newRig().deps())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.WindowDays != c.days || rep.WindowHours != c.hours {
+			t.Errorf("%v: days %d hours %d", c.since, rep.WindowDays, rep.WindowHours)
+		}
+	}
+}
