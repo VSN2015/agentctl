@@ -1,11 +1,14 @@
 HIGH  Prov1 - profile dev
       AdministratorAccess. Agent can reach it.
       Agent use, last 30 days: none
+      -> The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block it from this credential.
       -> Block the agent: deny t1
+      -> Agent deny rules are advisory unless the agent runs in a sandbox.
 
 HIGH  Prov1 - profile prod
       static key, permissions unknown offline
       Agent use, last 30 days: 2 calls
+      -> Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role.
 
 MED   Prov2 - github.com
       unused scopes

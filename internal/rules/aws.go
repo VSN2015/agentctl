@@ -55,13 +55,16 @@ func (AWSRule) Risks(c model.Credential, _ model.AgentState, _ AgentUse, _ Conte
 			if r.AdminWhy != "" {
 				d = append(d, r.AdminWhy)
 			}
-			out = append(out, Risk{Rule: "aws.admin", Severity: model.SevHigh, Headline: "Credential has administrator access", Details: d})
+			out = append(out, Risk{Rule: "aws.admin", Severity: model.SevHigh, Headline: "Credential has administrator access", Details: d,
+				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block it from this credential."},
+				Block:  true})
 		case !r.AdminChecked:
 			out = append(out, Risk{Severity: model.SevOK, Details: []string{"Permissions could not be read, so administrator access was not checked"}})
 		}
 	}
 	if c.LongLived {
-		out = append(out, Risk{Rule: "aws.long-lived-key", Severity: model.SevMed, Headline: "Long-lived access key that does not expire"})
+		out = append(out, Risk{Rule: "aws.long-lived-key", Severity: model.SevMed, Headline: "Long-lived access key that does not expire",
+			Advice: []string{"Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role."}})
 	}
 	return out
 }

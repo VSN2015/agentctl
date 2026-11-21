@@ -53,9 +53,11 @@ func fixedReport(cmd string) Report {
 		Findings: []model.Finding{
 			{ID: "agent-x:t1:profile:dev", Severity: model.SevHigh, Agent: "agent-x", Tool: "t1", Subject: "profile:dev",
 				Headline: "AdministratorAccess. Agent can reach it.", Details: []string{"Agent use, last 30 days: none"},
-				Advice: []string{"Block the agent: deny t1"}},
+				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block it from this credential.",
+					"Block the agent: deny t1", "Agent deny rules are advisory unless the agent runs in a sandbox."}},
 			{ID: "agent-x:t1:profile:prod", Severity: model.SevHigh, Agent: "agent-x", Tool: "t1", Subject: "profile:prod",
-				Headline: "static key, permissions unknown offline", Details: []string{"Agent use, last 30 days: 2 calls"}},
+				Headline: "static key, permissions unknown offline", Details: []string{"Agent use, last 30 days: 2 calls"},
+				Advice: []string{"Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role."}},
 			{ID: "agent-x:t2:github.com", Severity: model.SevMed, Agent: "agent-x", Tool: "t2", Subject: "github.com",
 				Headline: "unused scopes", Details: []string{"Scopes: repo, workflow"}, Advice: []string{"Replace the token"}},
 			{ID: "agent-x:t2:other.example.com", Severity: model.SevMed, Agent: "agent-x", Tool: "t2", Subject: "other.example.com",

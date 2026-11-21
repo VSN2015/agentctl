@@ -175,3 +175,60 @@ func TestAWSEmptyTargetCountsForEnvSelectedProfile(t *testing.T) {
 		t.Error("unset: default only")
 	}
 }
+
+func count(ss []string, s string) (n int) {
+	for _, e := range ss {
+		if e == s {
+			n++
+		}
+	}
+	return
+}
+
+func TestAWSAdviceForAdminAndLongLivedKey(t *testing.T) {
+	c := awsCred("prod", &model.Resolution{AdminChecked: true, Admin: true})
+	c.LongLived = true
+	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
+	u := hist(45)
+	u.Shell = calls(5, "aws", "", "prod") // used, so the engine adds no usage advice
+	f := run(c, agentIn(u), AWSRule{})
+	if !has(f.Advice, "only the permissions it needs") || !has(f.Advice, "aws sso login") {
+		t.Fatalf("advice = %q", f.Advice)
+	}
+	if count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
+		t.Errorf("block advice and advisory once each: %q", f.Advice)
+	}
+	for _, a := range f.Advice {
+		if strings.Contains(strings.ToLower(a), "revoke") || strings.Contains(a, "agentctl fix") {
+			t.Errorf("forbidden wording: %q", a)
+		}
+	}
+	// long-lived only: its advice does not drag in block advice
+	c.Resolved = nil
+	if f := run(c, agentIn(u), AWSRule{}); len(f.Advice) != 1 || !has(f.Advice, "aws sso login") {
+		t.Errorf("long-lived advice = %q", f.Advice)
+	}
+}
+
+func TestAWSUnusedAdminAdviceHasNoDuplicates(t *testing.T) {
+	c := awsCred("prod", &model.Resolution{AdminChecked: true, Admin: true})
+	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
+	f := run(c, agentIn(hist(45)), AWSRule{})
+	for _, a := range f.Advice {
+		if count(f.Advice, a) != 1 {
+			t.Errorf("duplicate %q in %q", a, f.Advice)
+		}
+	}
+	if !has(f.Advice, "only the permissions it needs") || count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
+		t.Errorf("advice = %q", f.Advice)
+	}
+}
+
+func TestAWSDeniedCredentialGetsNoAdvice(t *testing.T) {
+	c := awsCred("prod", &model.Resolution{AdminChecked: true, Admin: true})
+	c.LongLived = true
+	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessDenied}}
+	if f := run(c, agentIn(hist(45)), AWSRule{}); f.Severity != model.SevOK || len(f.Advice) != 0 || len(f.Rules) != 0 {
+		t.Fatalf("%+v", f)
+	}
+}

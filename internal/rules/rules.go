@@ -36,6 +36,7 @@ type Risk struct {
 	Headline string
 	Details  []string
 	Advice   []string
+	Block    bool // the agent should be kept away from this credential: the engine adds its block advice
 }
 
 type DevState int
@@ -130,7 +131,9 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	risks := rule.Risks(c, st, use, x)
 	sort.SliceStable(risks, func(i, j int) bool { return risks[i].Severity > risks[j].Severity })
 
+	needBlock := false
 	for _, r := range risks {
+		needBlock = needBlock || r.Block
 		f.Details = append(f.Details, r.Details...)
 		f.Advice = append(f.Advice, r.Advice...)
 		if r.Severity == model.SevOK {
@@ -206,6 +209,10 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 
 	if usageSev > model.SevOK {
 		f.Advice = append(f.Advice, usageAdvice(c, a, rule, use, x)...)
+	} else if needBlock && a.BlockAdvice != nil { // usageAdvice already carries block advice when it ran
+		if block := a.BlockAdvice(c.Tool); block != "" {
+			f.Advice = append(f.Advice, block, advisory)
+		}
 	}
 	return f
 }
