@@ -44,7 +44,12 @@ func NewProgress(w io.Writer) func(string) {
 			fmt.Fprint(w, "\r\x1b[2K")
 			return
 		}
-		fmt.Fprint(w, "\r\x1b[2Kagentctl: "+model.Sanitize(msg)+"…") // labels come from files
+		// shortcut: fixed 60-rune cap instead of reading the terminal width; read the width if lines still wrap
+		m := []rune(model.Sanitize(msg)) // labels come from files
+		if len(m) > 60 {
+			m = m[:60]
+		}
+		fmt.Fprint(w, "\r\x1b[2Kagentctl: "+string(m)+"…")
 	}
 }
 

@@ -116,3 +116,18 @@ func TestProgressClearedBeforeErrorLine(t *testing.T) {
 		t.Errorf("stderr %q", e)
 	}
 }
+
+func TestProgressCapsLongMessages(t *testing.T) {
+	var b bytes.Buffer
+	p := NewProgress(&b)
+	p("checking " + strings.Repeat("é", 200))
+	want := clearSeq + "agentctl: checking " + strings.Repeat("é", 51) + "…"
+	if b.String() != want {
+		t.Errorf("long: %q", b.String())
+	}
+	b.Reset()
+	p("checking Fakery label c1 (1/2)")
+	if b.String() != clearSeq+"agentctl: checking Fakery label c1 (1/2)…" {
+		t.Errorf("short: %q", b.String())
+	}
+}
