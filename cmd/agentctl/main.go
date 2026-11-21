@@ -15,7 +15,7 @@ func main() {
 	home, _ := os.UserHomeDir()
 	cwd, _ := os.Getwd()
 	io := cli.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr,
-		InIsTTY: isTTY(os.Stdin), OutIsTTY: isTTY(os.Stdout),
+		InIsTTY: isTTY(os.Stdin), OutIsTTY: isTTY(os.Stdout), ErrIsTTY: isTTY(os.Stderr),
 		Getenv: os.Getenv, Home: home, Cwd: cwd}
 	os.Exit(cli.Run(os.Args[1:], io))
 }

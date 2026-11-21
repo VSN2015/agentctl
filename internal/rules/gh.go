@@ -68,19 +68,19 @@ func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Cont
 		return nil
 	}
 	if !k.ScopesReadable {
-		return []Risk{{Severity: model.SevOK, Details: []string{"Token permissions cannot be read (fine-grained token), so unused scopes were not checked"}}}
+		return []Risk{{Severity: model.SevOK, Short: "scopes not checked", Details: []string{"Token permissions cannot be read (fine-grained token), so unused scopes were not checked"}}}
 	}
 	if len(use.Calls) == 0 {
 		return nil
 	}
 	if use.Unattributed > 0 {
-		return []Risk{{Severity: model.SevOK, Details: []string{scopeUnattributable}}}
+		return []Risk{{Severity: model.SevOK, Short: "scopes not checked", Details: []string{scopeUnattributable}}}
 	}
 	var needs []string
 	for _, call := range use.Calls {
 		ss, ok := ghScope[call.Sub]
 		if !ok {
-			return []Risk{{Severity: model.SevOK, Details: []string{scopeUnattributable}}}
+			return []Risk{{Severity: model.SevOK, Short: "scopes not checked", Details: []string{scopeUnattributable}}}
 		}
 		for _, s := range ss {
 			if !contains(needs, s) {
@@ -102,9 +102,9 @@ func (GHRule) Risks(c model.Credential, _ model.AgentState, use AgentUse, _ Cont
 		return nil
 	}
 	return []Risk{{
-		Rule: "gh.unused-scopes", Severity: model.SevMed, Headline: "Token has scopes the agent's commands did not need",
+		Rule: "gh.unused-scopes", Severity: model.SevMed, Headline: "Token has scopes the agent's commands did not need", Short: "extra scopes",
 		Details: []string{"Scopes: " + strings.Join(k.Scopes, ", "), "Agent's commands needed: " + strings.Join(needs, ", "), "Unused scopes: " + strings.Join(unused, ", ")},
-		Advice:  []string{"Replace the token with one limited to the scopes you use at https://" + c.ID + "/settings/tokens"},
+		Advice:  []string{"replace the token with fewer scopes: https://" + c.ID + "/settings/tokens"},
 	}}
 }
 

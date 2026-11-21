@@ -20,6 +20,7 @@ type IO struct {
 	In                io.Reader
 	Out, Err          io.Writer
 	InIsTTY, OutIsTTY bool
+	ErrIsTTY          bool
 	Getenv            func(string) string
 	Home, Cwd         string
 }

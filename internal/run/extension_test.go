@@ -22,7 +22,7 @@ func TestFakeToolAndAgentFlowThroughPipelineAndRenderers(t *testing.T) {
 		return code, r.out.String()
 	}
 	code, text := run(doctor())
-	if code != 0 || !strings.Contains(text, "Fakery") || !strings.Contains(text, "label c1") || !strings.Contains(text, "fake risk headline") {
+	if code != 0 || !strings.Contains(text, "Fakery") || !strings.Contains(text, "label c1") || !strings.Contains(text, "fake risk, unused") {
 		t.Errorf("doctor text exit %d:\n%s", code, text)
 	}
 	code, js := run(doctor(func(o *Options) { o.JSON = true }))

@@ -55,16 +55,16 @@ func (AWSRule) Risks(c model.Credential, _ model.AgentState, _ AgentUse, _ Conte
 			if r.AdminWhy != "" {
 				d = append(d, r.AdminWhy)
 			}
-			out = append(out, Risk{Rule: "aws.admin", Severity: model.SevHigh, Headline: "Credential has administrator access", Details: d,
-				Advice: []string{"The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS."},
+			out = append(out, Risk{Rule: "aws.admin", Severity: model.SevHigh, Headline: "Credential has administrator access", Short: "admin", Details: d,
+				Advice: []string{"give the agent a least-privilege profile, or block it from AWS"},
 				Block:  true})
 		case !r.AdminChecked:
-			out = append(out, Risk{Severity: model.SevOK, Details: []string{"Permissions could not be read, so administrator access was not checked"}})
+			out = append(out, Risk{Severity: model.SevOK, Short: "admin not checked", Details: []string{"Permissions could not be read, so administrator access was not checked"}})
 		}
 	}
 	if c.LongLived {
-		out = append(out, Risk{Rule: "aws.long-lived-key", Severity: model.SevMed, Headline: "Long-lived access key that does not expire",
-			Advice: []string{"Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role."}})
+		out = append(out, Risk{Rule: "aws.long-lived-key", Severity: model.SevMed, Headline: "Long-lived access key that does not expire", Short: "long-lived key",
+			Advice: []string{"replace the long-lived key with short-lived credentials (aws sso login, or an assumed role)"}})
 	}
 	return out
 }
@@ -100,6 +100,6 @@ func (AWSRule) Revoke(c model.Credential, x Context) string {
 	if c.KeyID == "" {
 		return ""
 	}
-	return fmt.Sprintf(`Nobody used this key in the last %s according to AWS. Revoke it at AWS (IAM console, or "aws iam update-access-key --status Inactive") for key %s.`,
-		windowText(x.Window), model.MaskKeyID(c.KeyID))
+	return fmt.Sprintf(`revoke key %s (%s): no use in the last %s per AWS (aws iam update-access-key --status Inactive)`,
+		model.MaskKeyID(c.KeyID), c.Label, WindowText(x.Window))
 }

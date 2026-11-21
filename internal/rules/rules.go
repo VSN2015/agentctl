@@ -5,6 +5,8 @@ package rules
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/VSN2015/agentctl/internal/devuse"
@@ -34,6 +36,7 @@ type Risk struct {
 	Rule     string
 	Severity model.Severity
 	Headline string
+	Short    string // table label, also set on SevOK risks whose details are not printed
 	Details  []string
 	Advice   []string
 	Block    bool // the agent should be kept away from this credential: the engine adds its block advice
@@ -72,8 +75,11 @@ type Input struct {
 
 const (
 	advisory     = "Agent deny rules are advisory unless the agent runs in a sandbox."
-	revokeIfNone = "If you do not use it either, revoke the credential."
+	revokeIfNone = "revoke a credential you do not use yourself"
 )
+
+// Advisory is the advice sentence about deny rules; a report may show it as a note instead of a fix.
+const Advisory = advisory
 
 // Evaluate returns one finding per (agent, credential), plus one per agent with an unrestricted shell.
 func Evaluate(in Input, tools []ToolRule) []model.Finding {
@@ -113,12 +119,13 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	switch {
 	case rule == nil:
 		f.Headline = "no rules exist for the tool " + c.Tool
+		f.Used, f.Issue = "?", "not evaluated"
 		return f
 	case st.Access == model.AccessDenied:
 		f.Headline = "denied by agent settings"
 		return f
 	}
-	span := windowText(x.Window)
+	span := WindowText(x.Window)
 	unreadable := c.ID == "unreadable" && c.Kind == "unknown"
 
 	var use AgentUse
@@ -132,7 +139,11 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	sort.SliceStable(risks, func(i, j int) bool { return risks[i].Severity > risks[j].Severity })
 
 	needBlock := false
+	var issues []string
 	for _, r := range risks {
+		if r.Short != "" {
+			issues = append(issues, r.Short)
+		}
 		needBlock = needBlock || r.Block
 		f.Details = append(f.Details, r.Details...)
 		f.Advice = append(f.Advice, r.Advice...)
@@ -172,17 +183,22 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	}
 
 	usageRule, usageSev := "", model.SevOK
+	f.Used = strconv.Itoa(use.Count)
 	switch use.State {
 	case UseUnused:
 		usageRule, usageSev = "usage.unused", model.SevMed
+		issues = append(issues, "unused")
 	case UseRare:
 		usageRule, usageSev = "usage.rare", model.SevLow
+		issues = append(issues, "rarely used")
 	case UseUnknown:
+		f.Used += "?"
 		f.Details = append(f.Details, plural(use.HistoryDays, "day")+" of history available")
 		if a.Usage.Unread > 0 {
 			f.Details = append(f.Details, "Some agent history could not be read, so absence of use is not certain")
 		}
 	case UseUnattributable:
+		f.Used = "?"
 		if unreadable {
 			f.Details = append(f.Details, "The credential could not be read, so its use cannot be attributed")
 		} else {
@@ -218,6 +234,10 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 			f.Advice = append(f.Advice, block, advisory)
 		}
 	}
+	if st.FileBlocked && st.Access == model.AccessAllowed {
+		issues = append(issues, "file blocked, tool allowed")
+	}
+	f.Issue = strings.Join(issues, ", ")
 	return f
 }
 

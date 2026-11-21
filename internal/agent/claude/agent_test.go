@@ -43,7 +43,7 @@ func TestAgentReadUsageUsesConfigDir(t *testing.T) {
 
 func TestAgentBlockAdvice(t *testing.T) {
 	a := New(t.TempDir(), t.TempDir(), "/h", "test")
-	if got, want := a.BlockAdvice("aws"), `Block the agent: add "Bash(aws:*)" to permissions.deny in ~/.claude/settings.json`; got != want {
+	if got, want := a.BlockAdvice("aws"), `deny "Bash(aws:*)" in ~/.claude/settings.json`; got != want {
 		t.Errorf("got %q", got)
 	}
 	if got := a.BlockAdvice("gh"); !strings.Contains(got, `"Bash(gh:*)"`) {

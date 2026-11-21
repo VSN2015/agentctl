@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/VSN2015/agentctl/internal/agent"
@@ -33,6 +35,71 @@ type Deps struct {
 	Confirm  func(providers []string) (bool, error) // may return confirm.ErrNoTerminal
 	Out, Err io.Writer                              // used by Execute only; Collect never touches them
 	OutIsTTY bool
+	Progress func(msg string) // nil means none; "" clears the line. Execute and Collect only call it
+}
+
+var spinFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+
+// NewProgress shows a spinner and a status on w, redrawn in place with no newline. A non-empty
+// message replaces the text; "" stops the animation, waits for it to finish and clears the line.
+// The ticker is never stopped: there is one per process and the process exits after the run.
+func NewProgress(w io.Writer) func(string) {
+	return newProgress(w, time.NewTicker(100*time.Millisecond).C)
+}
+
+func newProgress(w io.Writer, tick <-chan time.Time) func(string) {
+	var (
+		mu         sync.Mutex // guards w, text and frame
+		text       string
+		frame      int
+		stop, done chan struct{}
+	)
+	draw := func() { fmt.Fprint(w, "\r\x1b[2K"+string(spinFrames[frame])+" "+text) }
+	return func(msg string) {
+		if msg == "" {
+			if stop != nil {
+				close(stop)
+				<-done // after this the goroutine can write nothing more
+				stop = nil
+			}
+			fmt.Fprint(w, "\r\x1b[2K")
+			return
+		}
+		// shortcut: fixed 60-rune cap instead of reading the terminal width; read the width if lines still wrap
+		m := []rune(model.Sanitize(msg)) // labels come from files
+		suffix := ""
+		if len(m) > 60 {
+			m, suffix = m[:60], "…"
+		}
+		mu.Lock()
+		text = string(m) + suffix
+		draw()
+		mu.Unlock()
+		if stop != nil {
+			return
+		}
+		stop, done = make(chan struct{}), make(chan struct{})
+		go func(stop, done chan struct{}) {
+			defer close(done)
+			for {
+				select {
+				case <-stop:
+					return
+				case <-tick:
+					mu.Lock()
+					frame = (frame + 1) % len(spinFrames)
+					draw()
+					mu.Unlock()
+				}
+			}
+		}(stop, done)
+	}
+}
+
+func (d Deps) progress(msg string) {
+	if d.Progress != nil {
+		d.Progress(msg)
+	}
 }
 
 // Collect gathers everything and returns it as data: no printing, no exit status.
@@ -41,11 +108,13 @@ func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 	rep := render.Report{SchemaVersion: 1, GeneratedAt: now, Command: o.Command, Offline: o.Offline,
 		WindowDays: int(o.Since / (24 * time.Hour)), WindowHours: rules.WindowHours(o.Since), Agents: []string{}, Notes: append([]string{}, d.Notes...)}
 
+	d.progress("finding credentials")
 	creds, owners, providers := discover(d, &rep)
 	if !o.Offline && len(providers) > 0 {
 		if err := ctx.Err(); err != nil {
 			return render.Report{}, err
 		}
+		d.progress("") // the prompt must not share a line with progress
 		ok, err := d.Confirm(providers)
 		if cerr := ctx.Err(); cerr != nil { // Ctrl-C at the prompt must not read as "no"
 			return render.Report{}, cerr
@@ -62,7 +131,7 @@ func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 		}
 	}
 	if !rep.Offline && len(creds) > 0 {
-		if err := resolveAll(ctx, creds, owners, &rep); err != nil {
+		if err := resolveAll(ctx, d, creds, owners, &rep); err != nil {
 			return render.Report{}, err
 		}
 	}
@@ -113,12 +182,13 @@ func addNote(rep *render.Report, line string) {
 	}
 }
 
-func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Scanner, rep *render.Report) error {
+func resolveAll(ctx context.Context, d Deps, creds []model.Credential, owners []scan.Scanner, rep *render.Report) error {
 	for i := range creds {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		c := &creds[i]
+		d.progress(fmt.Sprintf("checking %s %s (%d/%d)", c.Provider, c.Label, i+1, len(creds)))
 		rctx, cancel := context.WithTimeout(ctx, resolveTimeout)
 		res, err := owners[i].Resolve(rctx, *c)
 		cancel()
@@ -149,7 +219,9 @@ func resolveAll(ctx context.Context, creds []model.Credential, owners []scan.Sca
 func evaluate(ctx context.Context, o Options, d Deps, now time.Time, rep *render.Report) error {
 	since := now.Add(-o.Since)
 	in := rules.Input{Creds: rep.Credentials, Getenv: d.Env.Getenv, Now: now, Window: o.Since, Offline: rep.Offline}
+	d.progress("reading agent history")
 	unread := 0
+	noHistory, shortDays := false, math.MaxInt
 	for _, a := range d.Agents {
 		u, err := a.ReadUsage(ctx, since, now)
 		if err != nil {
@@ -158,13 +230,33 @@ func evaluate(ctx context.Context, o Options, d Deps, now time.Time, rep *render
 		unread += u.Unread
 		rep.HistoryDays = max(rep.HistoryDays, u.HistoryDays(now))
 		in.Agents = append(in.Agents, agentInput(a, u))
+		switch {
+		case u.HistoryStart.IsZero():
+			noHistory = true
+		case now.Sub(u.HistoryStart) < o.Since:
+			shortDays = min(shortDays, u.HistoryDays(now))
+		}
 	}
 	if d.Dev != nil {
+		d.progress("reading shell history")
 		in.Dev = d.Dev()
+	}
+	if noHistory {
+		rep.Notes = append(rep.Notes, `no agent history was found, so "?" marks counts that could not be confirmed`)
+	} else if shortDays != math.MaxInt {
+		unit := "days"
+		if shortDays == 1 {
+			unit = "day"
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf(`agent history covers %d %s, less than the window, so "?" marks counts that may be incomplete`, shortDays, unit))
 	}
 	if unread > 0 {
 		rep.HistoryUnread = unread
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d agent history files could not be read, so absence of use is not certain", unread))
+		noun := "files"
+		if unread == 1 {
+			noun = "file"
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d agent history %s could not be read, so absence of use is not certain", unread, noun))
 	}
 	if in.Dev.Unread > 0 {
 		rep.Notes = append(rep.Notes, "some shell history could not be read, so your own use may be undercounted")
@@ -180,6 +272,7 @@ func agentInput(a agent.Agent, u usage.Usage) rules.AgentInput {
 // Execute is Collect, then render, then an exit status: 0, 1 (doctor found a HIGH finding) or 2.
 func Execute(ctx context.Context, o Options, d Deps) int {
 	rep, err := Collect(ctx, o, d)
+	d.progress("") // nothing may stay on screen or precede an error line
 	if err != nil {
 		switch {
 		case errors.Is(err, confirm.ErrNoTerminal):

@@ -128,3 +128,23 @@ func TestBuildDepsConfirmIsCancellable(t *testing.T) {
 		t.Fatal("Confirm did not return after cancel")
 	}
 }
+
+func TestBuildDepsProgressOnlyOnNonDumbErrTerminal(t *testing.T) {
+	for _, c := range []struct {
+		tty  bool
+		term string
+		want bool
+	}{{true, "xterm", true}, {true, "dumb", false}, {false, "xterm", false}} {
+		io, _, _ := newIO()
+		io.ErrIsTTY = c.tty
+		io.Getenv = func(k string) string {
+			if k == "TERM" {
+				return c.term
+			}
+			return ""
+		}
+		if d := buildDeps(context.Background(), run.Options{Command: "doctor"}, io); (d.Progress != nil) != c.want {
+			t.Errorf("tty %v term %q: progress set %v", c.tty, c.term, d.Progress != nil)
+		}
+	}
+}

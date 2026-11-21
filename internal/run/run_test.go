@@ -54,7 +54,7 @@ func (fakeRule) Attribute(_ model.Credential, calls []usage.Call, _ rules.Contex
 	return calls, 0
 }
 func (r fakeRule) Risks(model.Credential, model.AgentState, rules.AgentUse, rules.Context) []rules.Risk {
-	return []rules.Risk{{Rule: "fake.risk", Severity: r.sev, Headline: "fake risk headline", Details: []string{"fake detail"}}}
+	return []rules.Risk{{Rule: "fake.risk", Severity: r.sev, Headline: "fake risk headline", Short: "fake risk", Details: []string{"fake detail"}}}
 }
 func (fakeRule) DeveloperUse(model.Credential, rules.AgentUse, rules.Context) rules.DevUse {
 	return rules.DevUse{State: rules.DevUnknown}
@@ -68,6 +68,7 @@ type fakeAgent struct {
 	forbidUsage *testing.T
 	since       *time.Time
 	unread      int
+	history     time.Duration // 0 means 45 days; negative means no history at all
 	posture     agent.Posture
 }
 
@@ -79,7 +80,14 @@ func (a *fakeAgent) ReadUsage(_ context.Context, since, _ time.Time) (usage.Usag
 	if a.since != nil {
 		*a.since = since
 	}
-	return usage.Usage{Agent: a.name, Since: since, HistoryStart: now.Add(-45 * 24 * time.Hour), Unread: a.unread}, a.usageErr
+	start := now.Add(-45 * 24 * time.Hour)
+	switch {
+	case a.history < 0:
+		start = time.Time{}
+	case a.history > 0:
+		start = now.Add(-a.history)
+	}
+	return usage.Usage{Agent: a.name, Since: since, HistoryStart: start, Unread: a.unread}, a.usageErr
 }
 func (a *fakeAgent) Classify(model.Credential) model.AgentState {
 	s := a.state
@@ -320,7 +328,7 @@ func TestExecuteFileBlockedStillRisky(t *testing.T) {
 	if code := Execute(context.Background(), doctor(), r.deps()); code != 1 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(r.out.String(), "credential file blocked, tool still allowed") || !strings.Contains(r.out.String(), "HIGH") {
+	if !strings.Contains(r.out.String(), "file blocked, tool allowed") || !strings.Contains(r.out.String(), "HIGH") {
 		t.Errorf("out %q", r.out)
 	}
 }
@@ -461,7 +469,8 @@ func TestDiscoveryNotesReachReportOnce(t *testing.T) {
 			r2 := newRig()
 			r2.sc.creds = []model.Credential{a, b, c}
 			Execute(context.Background(), Options{Command: cmd, Offline: true, Since: 24 * time.Hour}, r2.deps())
-			if !strings.Contains(r2.out.String(), "Note: label c: own note") {
+			wantNote := map[string]string{"doctor": "\n  label c: own note\n", "inventory": "Note: label c: own note"}[cmd]
+			if !strings.Contains(r2.out.String(), wantNote) {
 				t.Errorf("%s text lacks discovery note:\n%s", cmd, r2.out)
 			}
 		}
@@ -554,6 +563,39 @@ func TestCollectWindowDaysAndHours(t *testing.T) {
 		}
 		if rep.WindowDays != c.days || rep.WindowHours != c.hours {
 			t.Errorf("%v: days %d hours %d", c.since, rep.WindowDays, rep.WindowHours)
+		}
+	}
+}
+
+func TestHistoryNotes(t *testing.T) {
+	cases := []struct {
+		name    string
+		history time.Duration
+		unread  int
+		cmd     string
+		want    string
+	}{
+		{"short", 10*24*time.Hour + time.Hour, 0, "doctor", `agent history covers 10 days, less than the window, so "?" marks counts that may be incomplete`},
+		{"one day", 25 * time.Hour, 0, "doctor", `agent history covers 1 day, less than the window, so "?" marks counts that may be incomplete`},
+		{"none", -1, 0, "doctor", `no agent history was found, so "?" marks counts that could not be confirmed`},
+		{"full", 45 * 24 * time.Hour, 0, "doctor", ""},
+		{"inventory", 10 * 24 * time.Hour, 0, "inventory", ""},
+		{"unread singular", 0, 1, "doctor", "1 agent history file could not be read, so absence of use is not certain"},
+		{"unread plural", 0, 2, "doctor", "2 agent history files could not be read, so absence of use is not certain"},
+	}
+	for _, c := range cases {
+		r := newRig()
+		r.ag.history, r.ag.unread = c.history, c.unread
+		rep, err := Collect(context.Background(), Options{Command: c.cmd, Offline: true, Since: 30 * 24 * time.Hour}, r.deps())
+		if err != nil {
+			t.Fatal(err)
+		}
+		all := strings.Join(rep.Notes, "\n")
+		if c.want != "" && !strings.Contains(all, c.want) {
+			t.Errorf("%s: notes %q lack %q", c.name, rep.Notes, c.want)
+		}
+		if c.want == "" && (strings.Contains(all, "agent history covers") || strings.Contains(all, "no agent history")) {
+			t.Errorf("%s: unexpected history note %q", c.name, rep.Notes)
 		}
 	}
 }

@@ -151,7 +151,7 @@ func TestAWSEngineRevokeOnly(t *testing.T) {
 	c := awsCred("prod", &model.Resolution{AdminChecked: true, KeyChecked: true})
 	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
 	f := run(c, agentIn(hist(45)), AWSRule{})
-	if len(f.Advice) != 1 || !strings.Contains(f.Advice[0], "Revoke it at AWS") {
+	if len(f.Advice) != 1 || !strings.Contains(f.Advice[0], "revoke key AKIA****WXYZ") {
 		t.Fatalf("%+v", f)
 	}
 }
@@ -192,7 +192,7 @@ func TestAWSAdviceForAdminAndLongLivedKey(t *testing.T) {
 	u := hist(45)
 	u.Shell = calls(5, "aws", "", "prod") // used, so the engine adds no usage advice
 	f := run(c, agentIn(u), AWSRule{})
-	if !has(f.Advice, "only the permissions it needs") || !has(f.Advice, "aws sso login") {
+	if !has(f.Advice, "least-privilege profile") || !has(f.Advice, "aws sso login") {
 		t.Fatalf("advice = %q", f.Advice)
 	}
 	if count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
@@ -219,7 +219,7 @@ func TestAWSUnusedAdminAdviceHasNoDuplicates(t *testing.T) {
 			t.Errorf("duplicate %q in %q", a, f.Advice)
 		}
 	}
-	if !has(f.Advice, "only the permissions it needs") || count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
+	if !has(f.Advice, "least-privilege profile") || count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
 		t.Errorf("advice = %q", f.Advice)
 	}
 }
@@ -239,7 +239,7 @@ func TestAWSAdviceWhenNobodyUsesTheKeyIsRevokeOnly(t *testing.T) {
 		c.LongLived = !admin
 		c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
 		f := run(c, agentIn(hist(45)), AWSRule{})
-		if len(f.Advice) != 1 || !strings.Contains(f.Advice[0], "Revoke it at AWS") || (admin && !has(f.Rules, "aws.admin")) || (!admin && !has(f.Rules, "aws.long-lived-key")) {
+		if len(f.Advice) != 1 || !strings.Contains(f.Advice[0], "revoke key AKIA****WXYZ") || (admin && !has(f.Rules, "aws.admin")) || (!admin && !has(f.Rules, "aws.long-lived-key")) {
 			t.Errorf("admin=%v: %+v", admin, f)
 		}
 	}
@@ -250,7 +250,7 @@ func TestAWSUnusedAdminDeveloperUsesIt(t *testing.T) {
 	c := awsCred("prod", &model.Resolution{AdminChecked: true, Admin: true, KeyChecked: true, KeyLastUsed: &recent, KeyLastUsedService: "s3"})
 	c.Access = []model.AgentState{{Agent: "claude-code", Access: model.AccessAllowed}}
 	f := run(c, agentIn(hist(45)), AWSRule{})
-	if len(f.Advice) != 3 || !has(f.Advice, "block the agent from AWS") || count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
+	if len(f.Advice) != 3 || !has(f.Advice, "block it from AWS") || count(f.Advice, "block aws") != 1 || count(f.Advice, advisory) != 1 {
 		t.Fatalf("%q", f.Advice)
 	}
 }

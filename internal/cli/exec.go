@@ -34,6 +34,9 @@ func buildDeps(ctx context.Context, o run.Options, io IO) run.Deps {
 		},
 		Out: io.Out, Err: io.Err, OutIsTTY: io.OutIsTTY,
 	}
+	if io.ErrIsTTY && io.Getenv("TERM") != "dumb" {
+		d.Progress = run.NewProgress(io.Err)
+	}
 	if io.Home == "" {
 		// An empty home would make devuse read history files from the current directory.
 		d.Notes = []string{"the home directory could not be determined, so shell history and agent settings under it were not read"}

@@ -276,8 +276,15 @@ func TestResolveNotesNeverCarrySDKErrorText(t *testing.T) {
 			t.Errorf("%s: err = %v, want %q", name, err, c.want)
 		}
 	}
+	// an SSO credential gets a fixed hint, still without SDK text
+	s, creds, _ := scannerWith(t, &fakeAPI{idErr: errors.New(leak)}, basicConfig, basicKeys, nil)
+	sso := find(t, creds, "default")
+	sso.Kind = "sso"
+	if _, err := s.Resolve(context.Background(), sso); err == nil || err.Error() != `aws identity check failed (for SSO, run "aws sso login")` {
+		t.Errorf("sso: %v", err)
+	}
 	f := &fakeAPI{id: Identity{ARN: "arn:aws:iam::1:user/u", Kind: "user", Name: "u"}, polErr: codedErr{leak}}
-	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, nil)
+	s, creds, _ = scannerWith(t, f, basicConfig, basicKeys, nil)
 	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
 	if err != nil || r.AdminWhy != "could not read policies (AccessDenied)" {
 		t.Errorf("policies: %+v %v", r, err)
