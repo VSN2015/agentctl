@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/rules"
@@ -26,7 +27,8 @@ type cell struct {
 	width int
 }
 
-func plainCell(v string) cell { v = s(v); return cell{v, len(v)} }
+// shortcut: counts runes, so double-width characters misalign; switch to a width table if that matters
+func plainCell(v string) cell { v = s(v); return cell{v, utf8.RuneCountInString(v)} }
 
 // row builds the cells of one finding.
 func (p *printer) row(r Report, f model.Finding) []cell {
@@ -56,11 +58,14 @@ func (p *printer) doctor(r Report) {
 	mode := map[bool]string{true: "offline", false: "online"}[r.Offline]
 	p.printf("agentctl doctor%s%s%s%s\n\n", sep, rules.WindowText(window), sep, mode)
 	switch {
-	case len(r.Credentials) == 0:
+	case len(r.Credentials) == 0 && len(r.Findings) == 0:
 		p.printf("No credentials found.\n")
 	case len(r.Findings) == 0:
 		p.printf("No findings.\n")
 	default:
+		if len(r.Credentials) == 0 {
+			p.printf("No credentials found.\n\n")
+		}
 		p.table(r, window)
 		p.fix(r)
 	}

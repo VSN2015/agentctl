@@ -161,7 +161,11 @@ func TestE2EOfflineReportShowsWhatWasFound(t *testing.T) {
 		}
 	}
 	_, doc, _, _ := runOnce(t, h, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour}, false)
-	if !strings.Contains(doc, "AWS     default") || !strings.Contains(doc, "long-lived key") || !strings.Contains(doc, "  1?  ") {
+	found := false
+	for _, l := range strings.Split(doc, "\n") { // one row must carry all three, so they cannot come from different rows
+		found = found || (strings.Contains(l, " default ") && strings.Contains(l, "long-lived key") && strings.Contains(l, " 1? "))
+	}
+	if !found {
 		t.Errorf("doctor did not count the Claude Bash use of aws:\n%s", doc)
 	}
 }

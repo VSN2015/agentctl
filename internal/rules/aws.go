@@ -100,6 +100,6 @@ func (AWSRule) Revoke(c model.Credential, x Context) string {
 	if c.KeyID == "" {
 		return ""
 	}
-	return fmt.Sprintf(`revoke key %s: no use in the last %s per AWS (aws iam update-access-key --status Inactive)`,
-		model.MaskKeyID(c.KeyID), WindowText(x.Window))
+	return fmt.Sprintf(`revoke key %s (%s): no use in the last %s per AWS (aws iam update-access-key --status Inactive)`,
+		model.MaskKeyID(c.KeyID), c.Label, WindowText(x.Window))
 }

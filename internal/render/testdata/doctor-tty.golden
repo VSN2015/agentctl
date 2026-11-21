@@ -15,7 +15,7 @@ Fix
   4  Replace the token
 
 Notes
-  1 agent history files could not be read
+  1 agent history file could not be read
   Prov1 profile x: online check skipped: needs login
   deny rules are advisory without a sandbox
   launch flags are not detected

@@ -170,3 +170,34 @@ func TestDoctorFancyTable(t *testing.T) {
 		t.Errorf("fancy:\n%q", out)
 	}
 }
+
+func TestDoctorShellFindingWithoutCredentials(t *testing.T) {
+	r := sixRows()
+	r.Credentials, r.Notes = nil, nil
+	r.Findings = []model.Finding{r.Findings[4]}
+	out := plain(t, r)
+	for _, want := range []string{"No credentials found.\n\nSEV", "agent  shell", "unrestricted", "  1  " + shellAdv} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestDoctorTableAlignsMultibyteNames(t *testing.T) {
+	r := sixRows()
+	r.Credentials[0].Label = "caf\u00e9"
+	lines := strings.Split(plain(t, r), "\n")
+	col := strings.Index(lines[2], "ISSUE") // bytes, ASCII before it in the header
+	for _, l := range lines[4:10] {
+		i := strings.Index(l, "unused")
+		if i < 0 {
+			i = strings.Index(l, "unrestricted")
+		}
+		if i < 0 {
+			i = strings.Index(l, "scopes")
+		}
+		if len([]rune(l[:i])) != col {
+			t.Errorf("row misaligned: %q", l)
+		}
+	}
+}

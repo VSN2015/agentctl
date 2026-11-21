@@ -68,6 +68,7 @@ type fakeAgent struct {
 	forbidUsage *testing.T
 	since       *time.Time
 	unread      int
+	history     time.Duration // 0 means 45 days; negative means no history at all
 	posture     agent.Posture
 }
 
@@ -79,7 +80,14 @@ func (a *fakeAgent) ReadUsage(_ context.Context, since, _ time.Time) (usage.Usag
 	if a.since != nil {
 		*a.since = since
 	}
-	return usage.Usage{Agent: a.name, Since: since, HistoryStart: now.Add(-45 * 24 * time.Hour), Unread: a.unread}, a.usageErr
+	start := now.Add(-45 * 24 * time.Hour)
+	switch {
+	case a.history < 0:
+		start = time.Time{}
+	case a.history > 0:
+		start = now.Add(-a.history)
+	}
+	return usage.Usage{Agent: a.name, Since: since, HistoryStart: start, Unread: a.unread}, a.usageErr
 }
 func (a *fakeAgent) Classify(model.Credential) model.AgentState {
 	s := a.state
@@ -555,6 +563,39 @@ func TestCollectWindowDaysAndHours(t *testing.T) {
 		}
 		if rep.WindowDays != c.days || rep.WindowHours != c.hours {
 			t.Errorf("%v: days %d hours %d", c.since, rep.WindowDays, rep.WindowHours)
+		}
+	}
+}
+
+func TestHistoryNotes(t *testing.T) {
+	cases := []struct {
+		name    string
+		history time.Duration
+		unread  int
+		cmd     string
+		want    string
+	}{
+		{"short", 10*24*time.Hour + time.Hour, 0, "doctor", `agent history covers 10 days, less than the window, so "?" marks counts that may be incomplete`},
+		{"one day", 25 * time.Hour, 0, "doctor", `agent history covers 1 day, less than the window, so "?" marks counts that may be incomplete`},
+		{"none", -1, 0, "doctor", `no agent history was found, so "?" marks counts that could not be confirmed`},
+		{"full", 45 * 24 * time.Hour, 0, "doctor", ""},
+		{"inventory", 10 * 24 * time.Hour, 0, "inventory", ""},
+		{"unread singular", 0, 1, "doctor", "1 agent history file could not be read, so absence of use is not certain"},
+		{"unread plural", 0, 2, "doctor", "2 agent history files could not be read, so absence of use is not certain"},
+	}
+	for _, c := range cases {
+		r := newRig()
+		r.ag.history, r.ag.unread = c.history, c.unread
+		rep, err := Collect(context.Background(), Options{Command: c.cmd, Offline: true, Since: 30 * 24 * time.Hour}, r.deps())
+		if err != nil {
+			t.Fatal(err)
+		}
+		all := strings.Join(rep.Notes, "\n")
+		if c.want != "" && !strings.Contains(all, c.want) {
+			t.Errorf("%s: notes %q lack %q", c.name, rep.Notes, c.want)
+		}
+		if c.want == "" && (strings.Contains(all, "agent history covers") || strings.Contains(all, "no agent history")) {
+			t.Errorf("%s: unexpected history note %q", c.name, rep.Notes)
 		}
 	}
 }

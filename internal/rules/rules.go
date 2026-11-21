@@ -119,6 +119,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 	switch {
 	case rule == nil:
 		f.Headline = "no rules exist for the tool " + c.Tool
+		f.Used, f.Issue = "?", "not evaluated"
 		return f
 	case st.Access == model.AccessDenied:
 		f.Headline = "denied by agent settings"

@@ -66,7 +66,7 @@ func fixedReport(cmd string) Report {
 				Headline: "denied by agent settings", Access: model.AccessDenied,
 				Details: []string{"Permissions could not be read, so administrator access was not checked"}},
 		},
-		Notes: []string{"1 agent history files could not be read", "Prov1 profile x: online check skipped: needs login"},
+		Notes: []string{"1 agent history file could not be read", "Prov1 profile x: online check skipped: needs login"},
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"time"
 
@@ -150,6 +151,7 @@ func evaluate(ctx context.Context, o Options, d Deps, now time.Time, rep *render
 	since := now.Add(-o.Since)
 	in := rules.Input{Creds: rep.Credentials, Getenv: d.Env.Getenv, Now: now, Window: o.Since, Offline: rep.Offline}
 	unread := 0
+	noHistory, shortDays := false, math.MaxInt
 	for _, a := range d.Agents {
 		u, err := a.ReadUsage(ctx, since, now)
 		if err != nil {
@@ -158,13 +160,32 @@ func evaluate(ctx context.Context, o Options, d Deps, now time.Time, rep *render
 		unread += u.Unread
 		rep.HistoryDays = max(rep.HistoryDays, u.HistoryDays(now))
 		in.Agents = append(in.Agents, agentInput(a, u))
+		switch {
+		case u.HistoryStart.IsZero():
+			noHistory = true
+		case now.Sub(u.HistoryStart) < o.Since:
+			shortDays = min(shortDays, u.HistoryDays(now))
+		}
 	}
 	if d.Dev != nil {
 		in.Dev = d.Dev()
 	}
+	if noHistory {
+		rep.Notes = append(rep.Notes, `no agent history was found, so "?" marks counts that could not be confirmed`)
+	} else if shortDays != math.MaxInt {
+		unit := "days"
+		if shortDays == 1 {
+			unit = "day"
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf(`agent history covers %d %s, less than the window, so "?" marks counts that may be incomplete`, shortDays, unit))
+	}
 	if unread > 0 {
 		rep.HistoryUnread = unread
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d agent history files could not be read, so absence of use is not certain", unread))
+		noun := "files"
+		if unread == 1 {
+			noun = "file"
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d agent history %s could not be read, so absence of use is not certain", unread, noun))
 	}
 	if in.Dev.Unread > 0 {
 		rep.Notes = append(rep.Notes, "some shell history could not be read, so your own use may be undercounted")

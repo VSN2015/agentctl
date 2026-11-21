@@ -88,8 +88,10 @@ func TestShortTexts(t *testing.T) {
 	if got := ShortWindow(12 * time.Hour); got != "12h" {
 		t.Error(got)
 	}
-	rev := AWSRule{}.Revoke(awsCred("p", nil), Context{Window: window})
-	if rev != "revoke key AKIA****WXYZ: no use in the last 30 days per AWS (aws iam update-access-key --status Inactive)" {
+	rc := awsCred("p", nil)
+	rc.Label = "prod"
+	rev := AWSRule{}.Revoke(rc, Context{Window: window})
+	if rev != "revoke key AKIA****WXYZ (prod): no use in the last 30 days per AWS (aws iam update-access-key --status Inactive)" {
 		t.Error(rev)
 	}
 	c := awsCred("p", &model.Resolution{AdminChecked: true, Admin: true})
@@ -99,5 +101,14 @@ func TestShortTexts(t *testing.T) {
 	c.LongLived = true
 	if a := (AWSRule{}).Risks(c, model.AgentState{}, AgentUse{}, Context{})[1].Advice[0]; !strings.HasPrefix(a, "replace the long-lived key with short-lived credentials (aws sso login") {
 		t.Error(a)
+	}
+}
+
+func TestUnregisteredToolRowIsNotACleanOK(t *testing.T) {
+	c := cred(model.AccessAllowed, false)
+	c.Tool = "mystery"
+	f := Evaluate(Input{Creds: []model.Credential{c}, Agents: []AgentInput{agentIn(hist(45))}, Now: now, Window: window}, nil)[0]
+	if f.Used != "?" || f.Issue != "not evaluated" {
+		t.Errorf("used %q issue %q", f.Used, f.Issue)
 	}
 }

@@ -28,7 +28,7 @@ Prov2
   other.example.com · oauth token
     agent-x: allowed without asking (credential file blocked, tool still allowed)
 
-Note: 1 agent history files could not be read
+Note: 1 agent history file could not be read
 Note: Prov1 profile x: online check skipped: needs login
 Note: agent deny rules are advisory unless the agent runs in a sandbox.
 Note: launch flags (such as skipping all permission prompts) are not visible in configuration files and are not detected.
