@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/VSN2015/agentctl/internal/confirm"
 	"github.com/VSN2015/agentctl/internal/devuse"
@@ -76,7 +77,7 @@ func TestExecuteProgressEnabledKeepsStdoutAndEndsCleared(t *testing.T) {
 	if !strings.HasSuffix(e, clearSeq) || strings.Contains(e, "\n") {
 		t.Errorf("stderr %q", e)
 	}
-	if !strings.Contains(e, "\r\x1b[2Kagentctl: checking Fakery label c1 (1/2)…") {
+	if !strings.Contains(e, "\r\x1b[2K⠋ checking Fakery label c1 (1/2)") {
 		t.Errorf("stderr %q", e)
 	}
 	r2, d2, _ := twoCreds()
@@ -84,14 +85,6 @@ func TestExecuteProgressEnabledKeepsStdoutAndEndsCleared(t *testing.T) {
 	Execute(context.Background(), doctor(), d2)
 	if r.out.String() != r2.out.String() || r2.errb.Len() != 0 {
 		t.Errorf("stdout differs or stderr not empty: %q", r2.errb)
-	}
-}
-
-func TestProgressSanitisesHostileText(t *testing.T) {
-	var b bytes.Buffer
-	NewProgress(&b)("checking x\x1b[31m\nevil")
-	if got := b.String(); got != "\r\x1b[2Kagentctl: checking x?[31m?evil…" {
-		t.Errorf("%q", got)
 	}
 }
 
@@ -117,17 +110,63 @@ func TestProgressClearedBeforeErrorLine(t *testing.T) {
 	}
 }
 
-func TestProgressCapsLongMessages(t *testing.T) {
+func TestSpinnerFramesAndReplace(t *testing.T) {
 	var b bytes.Buffer
-	p := NewProgress(&b)
-	p("checking " + strings.Repeat("é", 200))
-	want := clearSeq + "agentctl: checking " + strings.Repeat("é", 51) + "…"
+	tick := make(chan time.Time)
+	p := newProgress(&b, tick)
+	p("one")
+	for i := 0; i < 10; i++ {
+		tick <- time.Time{}
+	}
+	p("")
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	want := clearSeq + "⠋ one"
+	for i := 1; i <= 10; i++ {
+		want += clearSeq + frames[i%10] + " one"
+	}
+	want += clearSeq
 	if b.String() != want {
-		t.Errorf("long: %q", b.String())
+		t.Errorf("got %q\nwant %q", b.String(), want)
+	}
+	b.Reset() // a new message redraws at once with the new text, same frame
+	p = newProgress(&b, tick)
+	p("one")
+	p("two")
+	p("")
+	if want := clearSeq + "⠋ one" + clearSeq + "⠋ two" + clearSeq; b.String() != want {
+		t.Errorf("replace: %q", b.String())
+	}
+}
+
+func TestSpinnerSilentAfterClear(t *testing.T) {
+	var b bytes.Buffer
+	tick := make(chan time.Time, 5)
+	p := newProgress(&b, tick)
+	p("x")
+	p("")
+	n := b.Len()
+	for i := 0; i < 5; i++ {
+		tick <- time.Time{}
+	}
+	close(tick)
+	time.Sleep(20 * time.Millisecond)
+	if b.Len() != n || !strings.HasSuffix(b.String(), clearSeq) {
+		t.Errorf("wrote after clear: %q", b.String())
+	}
+}
+
+func TestSpinnerSanitisesAndCaps(t *testing.T) {
+	var b bytes.Buffer
+	p := newProgress(&b, make(chan time.Time))
+	p("checking x\x1b[31m\nevil")
+	p("")
+	if got := b.String(); got != clearSeq+"⠋ checking x?[31m?evil"+clearSeq {
+		t.Errorf("hostile: %q", got)
 	}
 	b.Reset()
-	p("checking Fakery label c1 (1/2)")
-	if b.String() != clearSeq+"agentctl: checking Fakery label c1 (1/2)…" {
-		t.Errorf("short: %q", b.String())
+	p("checking " + strings.Repeat("é", 200))
+	p("")
+	if want := clearSeq + "⠋ checking " + strings.Repeat("é", 51) + "…" + clearSeq; b.String() != want {
+		t.Errorf("long: %q", b.String())
 	}
 }

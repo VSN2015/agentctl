@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/VSN2015/agentctl/internal/agent"
@@ -37,19 +38,61 @@ type Deps struct {
 	Progress func(msg string) // nil means none; "" clears the line. Execute and Collect only call it
 }
 
-// NewProgress writes progress to w, one rewritten line with no newline; "" clears the line.
+var spinFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+
+// NewProgress shows a spinner and a status on w, redrawn in place with no newline. A non-empty
+// message replaces the text; "" stops the animation, waits for it to finish and clears the line.
+// The ticker is never stopped: there is one per process and the process exits after the run.
 func NewProgress(w io.Writer) func(string) {
+	return newProgress(w, time.NewTicker(100*time.Millisecond).C)
+}
+
+func newProgress(w io.Writer, tick <-chan time.Time) func(string) {
+	var (
+		mu         sync.Mutex // guards w, text and frame
+		text       string
+		frame      int
+		stop, done chan struct{}
+	)
+	draw := func() { fmt.Fprint(w, "\r\x1b[2K"+string(spinFrames[frame])+" "+text) }
 	return func(msg string) {
 		if msg == "" {
+			if stop != nil {
+				close(stop)
+				<-done // after this the goroutine can write nothing more
+				stop = nil
+			}
 			fmt.Fprint(w, "\r\x1b[2K")
 			return
 		}
 		// shortcut: fixed 60-rune cap instead of reading the terminal width; read the width if lines still wrap
 		m := []rune(model.Sanitize(msg)) // labels come from files
+		suffix := ""
 		if len(m) > 60 {
-			m = m[:60]
+			m, suffix = m[:60], "…"
 		}
-		fmt.Fprint(w, "\r\x1b[2Kagentctl: "+string(m)+"…")
+		mu.Lock()
+		text = string(m) + suffix
+		draw()
+		mu.Unlock()
+		if stop != nil {
+			return
+		}
+		stop, done = make(chan struct{}), make(chan struct{})
+		go func(stop, done chan struct{}) {
+			defer close(done)
+			for {
+				select {
+				case <-stop:
+					return
+				case <-tick:
+					mu.Lock()
+					frame = (frame + 1) % len(spinFrames)
+					draw()
+					mu.Unlock()
+				}
+			}
+		}(stop, done)
 	}
 }
 
