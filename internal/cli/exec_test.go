@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,5 +106,25 @@ func TestCancellableConfirmReturnsPromptlyOnCancel(t *testing.T) {
 	}
 	if ok, err := cancellable(context.Background(), func() (bool, error) { return true, nil }); !ok || err != nil {
 		t.Errorf("normal answer: %v %v", ok, err)
+	}
+}
+
+func TestBuildDepsConfirmIsCancellable(t *testing.T) {
+	cio, _, _ := emptyHomeIO(t)
+	pr, pw := io.Pipe() // a terminal that never answers
+	defer pw.Close()
+	cio.In, cio.InIsTTY = pr, true
+	ctx, cancel := context.WithCancel(context.Background())
+	d := buildDeps(ctx, run.Options{Command: "inventory"}, cio)
+	done := make(chan error, 1)
+	go func() { _, err := d.Confirm([]string{"AWS"}); done <- err }()
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Confirm did not return after cancel")
 	}
 }
