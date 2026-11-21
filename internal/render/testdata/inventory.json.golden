@@ -1,0 +1,281 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-03-01T12:00:00Z",
+  "command": "inventory",
+  "offline": false,
+  "window_days": 30,
+  "window_hours": 720,
+  "history_days": 45,
+  "history_unread": 1,
+  "agents": [
+    "agent-x"
+  ],
+  "credentials": [
+    {
+      "tool": "t1",
+      "provider": "Prov1",
+      "id": "profile:prod",
+      "label": "profile prod",
+      "kind": "static key",
+      "source": "file",
+      "files": [],
+      "env_vars": [],
+      "long_lived": false,
+      "key_id": "AKIA****WXYZ",
+      "identity": "",
+      "agents": [
+        {
+          "agent": "agent-x",
+          "access": "allowed",
+          "file_blocked": false
+        }
+      ],
+      "resolved": null,
+      "notes": []
+    },
+    {
+      "tool": "t1",
+      "provider": "Prov1",
+      "id": "profile:dev",
+      "label": "profile dev",
+      "kind": "sso",
+      "source": "file",
+      "files": [],
+      "env_vars": [
+        "T1_TOKEN"
+      ],
+      "long_lived": false,
+      "key_id": "AKIA****ABCD",
+      "identity": "",
+      "agents": [
+        {
+          "agent": "agent-x",
+          "access": "allowed",
+          "file_blocked": false
+        }
+      ],
+      "resolved": {
+        "identity": "arn:dev",
+        "admin_checked": true,
+        "admin": true,
+        "admin_why": "AdministratorAccess",
+        "scopes": [],
+        "scopes_readable": false,
+        "key_checked": true,
+        "key_last_used": "2026-02-20T08:00:00Z",
+        "key_last_used_service": "s3"
+      },
+      "notes": []
+    },
+    {
+      "tool": "t1",
+      "provider": "Prov1",
+      "id": "profile:ro",
+      "label": "profile ro",
+      "kind": "static key",
+      "source": "file",
+      "files": [],
+      "env_vars": [],
+      "long_lived": false,
+      "key_id": "AKIA****EEEE",
+      "identity": "",
+      "agents": [
+        {
+          "agent": "agent-x",
+          "access": "asks",
+          "file_blocked": false
+        }
+      ],
+      "resolved": {
+        "identity": "arn:ro",
+        "admin_checked": false,
+        "admin": false,
+        "admin_why": "could not read policies",
+        "scopes": [],
+        "scopes_readable": false,
+        "key_checked": false,
+        "key_last_used": null,
+        "key_last_used_service": ""
+      },
+      "notes": []
+    },
+    {
+      "tool": "t2",
+      "provider": "Prov2",
+      "id": "github.com",
+      "label": "github.com",
+      "kind": "oauth token",
+      "source": "file",
+      "files": [],
+      "env_vars": [],
+      "long_lived": false,
+      "key_id": "",
+      "identity": "octo",
+      "agents": [
+        {
+          "agent": "agent-x",
+          "access": "asks",
+          "file_blocked": false
+        }
+      ],
+      "resolved": {
+        "identity": "octo",
+        "admin_checked": false,
+        "admin": false,
+        "admin_why": "",
+        "scopes": [
+          "repo",
+          "workflow"
+        ],
+        "scopes_readable": true,
+        "key_checked": false,
+        "key_last_used": null,
+        "key_last_used_service": ""
+      },
+      "notes": []
+    },
+    {
+      "tool": "t2",
+      "provider": "Prov2",
+      "id": "ghe.example.com",
+      "label": "ghe.example.com",
+      "kind": "fine-grained",
+      "source": "file",
+      "files": [],
+      "env_vars": [],
+      "long_lived": false,
+      "key_id": "",
+      "identity": "",
+      "agents": [
+        {
+          "agent": "agent-x",
+          "access": "denied",
+          "file_blocked": false
+        }
+      ],
+      "resolved": {
+        "identity": "bot",
+        "admin_checked": false,
+        "admin": false,
+        "admin_why": "",
+        "scopes": [],
+        "scopes_readable": false,
+        "key_checked": false,
+        "key_last_used": null,
+        "key_last_used_service": ""
+      },
+      "notes": []
+    },
+    {
+      "tool": "t2",
+      "provider": "Prov2",
+      "id": "other.example.com",
+      "label": "other.example.com",
+      "kind": "oauth token",
+      "source": "file",
+      "files": [],
+      "env_vars": [],
+      "long_lived": false,
+      "key_id": "",
+      "identity": "",
+      "agents": [
+        {
+          "agent": "agent-x",
+          "access": "allowed",
+          "file_blocked": true
+        }
+      ],
+      "resolved": null,
+      "notes": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "agent-x:t1:profile:dev",
+      "rules": [],
+      "severity": "HIGH",
+      "agent": "agent-x",
+      "tool": "t1",
+      "subject": "profile:dev",
+      "headline": "AdministratorAccess. Agent can reach it.",
+      "details": [
+        "Agent use, last 30 days: none"
+      ],
+      "advice": [
+        "The agent should not work with administrator rights: give it a profile with only the permissions it needs, or block the agent from AWS.",
+        "Block the agent: deny t1",
+        "Agent deny rules are advisory unless the agent runs in a sandbox."
+      ],
+      "access": "",
+      "file_blocked": false
+    },
+    {
+      "id": "agent-x:t1:profile:prod",
+      "rules": [],
+      "severity": "HIGH",
+      "agent": "agent-x",
+      "tool": "t1",
+      "subject": "profile:prod",
+      "headline": "static key, permissions unknown offline",
+      "details": [
+        "Agent use, last 30 days: 2 calls"
+      ],
+      "advice": [
+        "Replace the long-lived access key with short-lived credentials: sign in with IAM Identity Center (aws sso login) or use an assumed role."
+      ],
+      "access": "",
+      "file_blocked": false
+    },
+    {
+      "id": "agent-x:t2:github.com",
+      "rules": [],
+      "severity": "MED",
+      "agent": "agent-x",
+      "tool": "t2",
+      "subject": "github.com",
+      "headline": "unused scopes",
+      "details": [
+        "Scopes: repo, workflow"
+      ],
+      "advice": [
+        "Replace the token"
+      ],
+      "access": "",
+      "file_blocked": false
+    },
+    {
+      "id": "agent-x:t2:other.example.com",
+      "rules": [],
+      "severity": "MED",
+      "agent": "agent-x",
+      "tool": "t2",
+      "subject": "other.example.com",
+      "headline": "token reachable",
+      "details": [
+        "credential file blocked, tool still allowed"
+      ],
+      "advice": [],
+      "access": "",
+      "file_blocked": true
+    },
+    {
+      "id": "agent-x:t2:ghe.example.com",
+      "rules": [],
+      "severity": "OK",
+      "agent": "agent-x",
+      "tool": "t2",
+      "subject": "ghe.example.com",
+      "headline": "denied by agent settings",
+      "details": [
+        "Permissions could not be read, so administrator access was not checked"
+      ],
+      "advice": [],
+      "access": "denied",
+      "file_blocked": false
+    }
+  ],
+  "notes": [
+    "1 agent history files could not be read",
+    "Prov1 profile x: online check skipped: needs login"
+  ]
+}

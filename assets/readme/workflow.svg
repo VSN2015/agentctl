@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="372" viewBox="0 0 1200 372" role="img" aria-labelledby="title desc">
+  <title id="title">How agentctl works</title>
+  <desc id="desc">Four steps. One: find credentials in files and environment. Two: classify what the agent's settings allow, ask or deny. Three: count what the agent actually ran, from its session history. Four, optional: ask the provider what the credential can do, read-only and only if you say yes. The result is a report with HIGH, MED and OK findings.</desc>
+
+  <rect width="1200" height="372" rx="22" fill="#0d1014"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif">
+    <g id="step-1" transform="translate(56 52)">
+      <text x="0" y="18" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="2" fill="#8b929c">01</text>
+      <text x="0" y="68" font-size="40" font-weight="700" fill="#ece9e2">Find</text>
+      <text x="0" y="108" font-size="20" fill="#b9bdc4">credentials in files</text>
+      <text x="0" y="136" font-size="20" fill="#b9bdc4">and the environment</text>
+    </g>
+    <g id="step-2" transform="translate(336 52)">
+      <text x="0" y="18" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="2" fill="#8b929c">02</text>
+      <text x="0" y="68" font-size="40" font-weight="700" fill="#ece9e2">Classify</text>
+      <text x="0" y="108" font-size="20" fill="#b9bdc4">what the agent's settings</text>
+      <text x="0" y="136" font-size="20" fill="#b9bdc4">allow, ask or deny</text>
+    </g>
+    <g id="step-3" transform="translate(616 52)">
+      <text x="0" y="18" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="2" fill="#8b929c">03</text>
+      <text x="0" y="68" font-size="40" font-weight="700" fill="#ece9e2">Count</text>
+      <text x="0" y="108" font-size="20" fill="#b9bdc4">what the agent really ran,</text>
+      <text x="0" y="136" font-size="20" fill="#b9bdc4">from its session history</text>
+    </g>
+    <g id="step-4" transform="translate(896 52)">
+      <text x="0" y="18" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="2" fill="#8b929c">04 · OPTIONAL</text>
+      <text x="0" y="68" font-size="40" font-weight="700" fill="#ece9e2">Ask</text>
+      <text x="0" y="108" font-size="20" fill="#b9bdc4">the provider, read-only,</text>
+      <text x="0" y="136" font-size="20" fill="#b9bdc4">only if you say yes</text>
+    </g>
+  </g>
+
+  <g id="dividers" stroke="#262c35" stroke-width="2">
+    <line x1="308" y1="52" x2="308" y2="192"/>
+    <line x1="588" y1="52" x2="588" y2="192"/>
+    <line x1="868" y1="52" x2="868" y2="192"/>
+  </g>
+
+  <g id="report" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20">
+    <rect x="48" y="232" width="1104" height="92" rx="14" fill="#14181e" stroke="#262c35" stroke-width="2"/>
+    <text x="80" y="270" fill="#8b929c">→ report</text>
+    <text x="80" y="302" font-weight="700" fill="#f0605a">HIGH</text>
+    <text x="146" y="302" fill="#b9bdc4">risky access</text>
+    <text x="420" y="302" font-weight="700" fill="#e0a82e">MED</text>
+    <text x="474" y="302" fill="#b9bdc4">unused or too broad</text>
+    <text x="826" y="302" font-weight="700" fill="#5fb760">OK</text>
+    <text x="868" y="302" fill="#b9bdc4">in use, nothing to do</text>
+  </g>
+</svg>

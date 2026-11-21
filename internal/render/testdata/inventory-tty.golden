@@ -1,0 +1,34 @@
+Prov1
+  profile prod · static key
+    Key: AKIA****WXYZ
+    agent-x: allowed without asking
+  profile dev · sso
+    Identity: arn:dev
+    Key: AKIA****ABCD
+    Admin: yes (AdministratorAccess)
+    Key last used: 2026-02-20 (s3)
+    Environment variables: T1_TOKEN
+    agent-x: allowed without asking
+  profile ro · static key
+    Identity: arn:ro
+    Key: AKIA****EEEE
+    Admin: permissions could not be read (could not read policies)
+    Key last used: could not check
+    agent-x: asks first
+
+Prov2
+  github.com · oauth token
+    Identity: octo
+    Scopes: repo, workflow
+    agent-x: asks first
+  ghe.example.com · fine-grained
+    Identity: bot
+    Permissions: permissions cannot be read
+    agent-x: denied
+  other.example.com · oauth token
+    agent-x: allowed without asking (credential file blocked, tool still allowed)
+
+Note: 1 agent history files could not be read
+Note: Prov1 profile x: online check skipped: needs login
+Note: agent deny rules are advisory unless the agent runs in a sandbox.
+Note: launch flags (such as skipping all permission prompts) are not visible in configuration files and are not detected.
