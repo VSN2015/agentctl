@@ -517,3 +517,28 @@ func TestResolutionNotesReachCredentialAndReport(t *testing.T) {
 		t.Errorf("report notes = %v", rep.Notes)
 	}
 }
+
+func TestFailedResolveKeepsItsOwnNotesOnce(t *testing.T) {
+	r := newRig()
+	r.sc.creds = []model.Credential{cred("fake", "a")}
+	r.sc.resolve = func(context.Context, model.Credential) (*model.Resolution, error) {
+		return &model.Resolution{Notes: []string{"endpoint override"}}, errors.New("boom")
+	}
+	rep, err := Collect(context.Background(), inventory(), r.deps())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := rep.Credentials[0]
+	if c.Resolved != nil || len(c.Notes) != 2 || !strings.Contains(c.Notes[0], "boom") || c.Notes[1] != "endpoint override" {
+		t.Errorf("notes = %v resolved = %v", c.Notes, c.Resolved)
+	}
+	n := 0
+	for _, l := range rep.Notes {
+		if strings.HasSuffix(l, "endpoint override") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("report notes = %v", rep.Notes)
+	}
+}

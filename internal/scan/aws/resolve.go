@@ -34,14 +34,15 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 		}
 		return nil, cleanErr("aws setup failed", err, false)
 	}
-	id, err := api.CallerIdentity(ctx)
-	if err != nil {
-		return nil, cleanErr("aws identity check failed", err, true)
-	}
-	r := &model.Resolution{Identity: id.ARN}
-	if s.endpointOverride {
+	r := &model.Resolution{}
+	if s.endpointOverride { // set before the first signed call so a failure carries it too
 		r.Notes = []string{"AWS endpoint override is set; online checks went to that endpoint"}
 	}
+	id, err := api.CallerIdentity(ctx)
+	if err != nil {
+		return &model.Resolution{Notes: r.Notes}, cleanErr("aws identity check failed", err, true)
+	}
+	r.Identity = id.ARN
 	// before Policies: our own IAM calls may update the key's last-used record
 	if key := s.keys[c.ID]; key != "" {
 		if u, err := api.AccessKeyLastUsed(ctx, key); err == nil {
@@ -78,7 +79,8 @@ func reserved(name string) bool {
 func errCode(err error) string {
 	var ae smithy.APIError
 	if errors.As(err, &ae) {
-		return " (" + model.Sanitize(ae.ErrorCode()) + ")"
+		code := []rune(model.Sanitize(ae.ErrorCode()))
+		return " (" + string(code[:min(len(code), 64)]) + ")"
 	}
 	return ""
 }

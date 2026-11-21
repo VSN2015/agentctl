@@ -305,3 +305,23 @@ func TestResolveNotesEndpointOverride(t *testing.T) {
 		t.Errorf("empty value: %+v %v", r, err)
 	}
 }
+
+func TestResolveFailureStillNotesEndpointOverride(t *testing.T) {
+	const note = "AWS endpoint override is set; online checks went to that endpoint"
+	f := &fakeAPI{idErr: errors.New("denied")}
+	s, creds, _ := scannerWith(t, f, basicConfig, basicKeys, map[string]string{"AWS_ENDPOINT_URL": "https://example.invalid"})
+	r, err := s.Resolve(context.Background(), find(t, creds, "default"))
+	if err == nil || strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("err = %v", err)
+	}
+	if r == nil || len(r.Notes) != 1 || r.Notes[0] != note {
+		t.Fatalf("notes = %+v", r)
+	}
+}
+
+func TestErrCodeIsCapped(t *testing.T) {
+	err := &smithy.GenericAPIError{Code: strings.Repeat("é", 500)}
+	if got := errCode(err); len([]rune(got)) > 64+3 {
+		t.Fatalf("len = %d", len([]rune(got)))
+	}
+}
