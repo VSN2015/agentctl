@@ -200,3 +200,80 @@ func TestE2EKubectlProductionContext(t *testing.T) {
 		t.Errorf("dev unnamed: %+v", f)
 	}
 }
+
+func TestE2EMCPServers(t *testing.T) {
+	const canary = "MCP-ENV-CANARY-4c1d"
+	dir := t.TempDir()
+	cl := filepath.Join(dir, ".claude")
+	session := filepath.Join(cl, "projects", "-p", "s.jsonl")
+	if err := os.MkdirAll(filepath.Dir(session), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `{"mcpServers":{"filesystem":{"command":"npx","args":["-y","fs"]},` +
+		`"idle":{"command":"idle-mcp","env":{"TOKEN":"` + canary + `"}},"blocked":{"command":"blocked-mcp"}}}`
+	for p, body := range map[string]string{
+		filepath.Join(cl, ".claude.json"):  cfg,
+		filepath.Join(cl, "settings.json"): `{"permissions":{"deny":["mcp__blocked"]}}`,
+	} {
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := func(ts time.Time, id string) string {
+		b, _ := json.Marshal(map[string]any{"type": "assistant", "timestamp": ts.Format(time.RFC3339Nano),
+			"message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "id": id,
+				"name": "mcp__filesystem__read_file", "input": map[string]any{}}}}})
+		return string(b)
+	}
+	write := func(first time.Time) {
+		now := time.Now()
+		lines := []string{rec(first, "m0"), rec(now.Add(-3*time.Hour), "m1"), rec(now.Add(-2*time.Hour), "m2"), rec(now.Add(-time.Hour), "m3")}
+		if err := os.WriteFile(session, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type finding struct {
+		ID, Severity, Access, Used string
+		Rules, Advice              []string
+	}
+	doctor := func() map[string]finding {
+		o := run.Options{Command: "doctor", Offline: true, JSON: true, Since: 720 * time.Hour}
+		code, out, errb := runLocal(t, dir, nil, o)
+		if code != 0 || strings.Contains(out+errb, canary) {
+			t.Fatalf("exit %d out %q err %q", code, out, errb)
+		}
+		var doc struct{ Findings []finding }
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]finding{}
+		for _, f := range doc.Findings {
+			m[f.ID] = f
+		}
+		return m
+	}
+
+	write(time.Now().Add(-40 * 24 * time.Hour))
+	m := doctor()
+	if f := m["claude-code:mcp:filesystem"]; f.Severity != "OK" || f.Used != "3" {
+		t.Errorf("filesystem: %+v", f)
+	}
+	f := m["claude-code:mcp:idle"]
+	if len(f.Rules) != 1 || f.Rules[0] != "usage.unused" || !strings.Contains(strings.Join(f.Advice, "\n"), `deny "mcp__idle" in ~/.claude/settings.json`) {
+		t.Errorf("idle: %+v", f)
+	}
+	if f := m["claude-code:mcp:blocked"]; f.Access != "denied" {
+		t.Errorf("blocked: %+v", f)
+	}
+	code, out, errb := runLocal(t, dir, nil, run.Options{Command: "inventory", Offline: true, Since: 720 * time.Hour})
+	if code != 0 || !strings.Contains(out, "MCP") || !strings.Contains(out, "filesystem") || strings.Contains(out+errb, canary) {
+		t.Errorf("inventory exit %d out %q err %q", code, out, errb)
+	}
+	_, text, _ := runLocal(t, dir, nil, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour})
+	t.Logf("doctor text:\n%s", text)
+
+	write(time.Now().Add(-5 * 24 * time.Hour))
+	if f := doctor()["claude-code:mcp:idle"]; f.Used != "0?" {
+		t.Errorf("short history idle: %+v", f)
+	}
+}
