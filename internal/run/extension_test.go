@@ -53,7 +53,7 @@ func TestFakeToolAndAgentFlowThroughPipelineAndRenderers(t *testing.T) {
 }
 
 func TestSourcesHaveNoPerToolLiterals(t *testing.T) {
-	banned := map[string]bool{"aws": true, "gh": true, "claude-code": true}
+	banned := map[string]bool{"aws": true, "gh": true, "claude-code": true, "docker": true, "kubectl": true, "mcp": true}
 	for _, pat := range []string{"*.go", "../render/*.go"} {
 		files, _ := filepath.Glob(pat)
 		for _, f := range files {

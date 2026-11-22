@@ -24,6 +24,10 @@ type SkipError struct{ Reason string }
 
 func (e *SkipError) Error() string { return e.Reason }
 
+// LocalOnly is implemented by a scanner that has nothing to resolve online: the pipeline
+// neither lists its provider in the prompt nor calls its Resolve.
+type LocalOnly interface{ LocalOnly() }
+
 type Scanner interface {
 	Name() string     // "aws"
 	Provider() string // "AWS", used in the prompt

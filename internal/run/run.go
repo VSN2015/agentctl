@@ -166,7 +166,7 @@ func discover(d Deps, rep *render.Report) (creds []model.Credential, owners []sc
 				addNote(rep, c.Label+": "+n)
 			}
 			creds, owners = append(creds, c), append(owners, sc)
-			if !seen[c.Provider] {
+			if _, local := sc.(scan.LocalOnly); !local && !seen[c.Provider] {
 				seen[c.Provider] = true
 				providers = append(providers, c.Provider)
 			}
@@ -183,12 +183,22 @@ func addNote(rep *render.Report, line string) {
 }
 
 func resolveAll(ctx context.Context, d Deps, creds []model.Credential, owners []scan.Scanner, rep *render.Report) error {
+	total, done := 0, 0
+	for _, o := range owners {
+		if _, local := o.(scan.LocalOnly); !local {
+			total++
+		}
+	}
 	for i := range creds {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if _, local := owners[i].(scan.LocalOnly); local {
+			continue
+		}
 		c := &creds[i]
-		d.progress(fmt.Sprintf("checking %s %s (%d/%d)", c.Provider, c.Label, i+1, len(creds)))
+		done++
+		d.progress(fmt.Sprintf("checking %s %s (%d/%d)", c.Provider, c.Label, done, total))
 		rctx, cancel := context.WithTimeout(ctx, resolveTimeout)
 		res, err := owners[i].Resolve(rctx, *c)
 		cancel()
