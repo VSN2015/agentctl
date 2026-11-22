@@ -7,5 +7,6 @@ import "time"
 type Options struct {
 	Command            string
 	Offline, Yes, JSON bool
+	Inventory          bool // doctor only
 	Since              time.Duration
 }

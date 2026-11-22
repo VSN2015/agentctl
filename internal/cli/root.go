@@ -83,6 +83,9 @@ func newPipelineCmd(io IO, exec Exec, name, short string) *cobra.Command {
 	}
 	quiet(cmd, io)
 	f.register(cmd)
+	if name == "doctor" {
+		cmd.Flags().BoolVar(&f.inventory, "inventory", false, "also list every credential found")
+	}
 	return cmd
 }
 
