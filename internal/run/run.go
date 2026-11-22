@@ -106,7 +106,7 @@ func (d Deps) progress(msg string) {
 // Collect gathers everything and returns it as data: no printing, no exit status.
 func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 	now := d.Now()
-	rep := render.Report{SchemaVersion: 1, GeneratedAt: now, Command: o.Command, Offline: o.Offline,
+	rep := render.Report{SchemaVersion: 1, GeneratedAt: now, Command: o.Command, Offline: o.Offline, Inventory: o.Inventory,
 		WindowDays: int(o.Since / (24 * time.Hour)), WindowHours: rules.WindowHours(o.Since), Agents: []string{}, Notes: append([]string{}, d.Notes...)}
 
 	d.progress("finding credentials")

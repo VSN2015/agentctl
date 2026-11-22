@@ -68,6 +68,7 @@ Or download an archive for your OS and CPU, check it, and unpack it:
 
     agentctl inventory    # what credentials exist and what the agent may do with them
     agentctl doctor       # the same, plus findings: what is risky and what to change
+    agentctl doctor --inventory   # the findings, preceded by the full credential list
 
 Start with `agentctl doctor --offline` to see a report without any network request.
 

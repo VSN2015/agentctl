@@ -228,3 +228,34 @@ func TestRenderDoctorWithCredentialsButNoFindings(t *testing.T) {
 		t.Errorf("got:\n%s", b.String())
 	}
 }
+
+func TestRenderDoctorInventoryFlag(t *testing.T) {
+	render := func(r Report) string {
+		var b bytes.Buffer
+		if err := Text(&b, r, Style{}); err != nil {
+			t.Fatal(err)
+		}
+		return b.String()
+	}
+	plain, inv := render(fixedReport("doctor")), render(fixedReport("inventory"))
+	if want, _ := os.ReadFile("testdata/doctor-plain.golden"); plain != string(want) {
+		t.Fatalf("doctor without flag differs from golden:\n%s", plain)
+	}
+	r := fixedReport("doctor")
+	r.Inventory = true
+	got := render(r)
+	header, rest, _ := strings.Cut(plain, "\n\n")
+	list, _, _ := strings.Cut(inv, "\nNote: ") // the inventory command's own notes block is not part of the list
+	if want := header + "\n\n" + list + "\n" + rest; got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if strings.Index(got, "Prov1") > strings.Index(got, "SEV") {
+		t.Errorf("credential list is not before the findings table:\n%s", got)
+	}
+	r.Credentials, r.Findings = nil, nil
+	off := r
+	off.Inventory = false
+	if got, want := render(r), render(off); got != want {
+		t.Errorf("no credentials: got %q want %q", got, want)
+	}
+}

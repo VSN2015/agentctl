@@ -602,6 +602,18 @@ func TestHistoryNotes(t *testing.T) {
 	}
 }
 
+func TestCollectCopiesInventoryFlag(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		rep, err := Collect(context.Background(), Options{Command: "doctor", Offline: true, Inventory: want}, newRig().deps())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.Inventory != want {
+			t.Errorf("Inventory=%v: report has %v", want, rep.Inventory)
+		}
+	}
+}
+
 type localScanner struct{ *fakeScanner }
 
 func (localScanner) LocalOnly() {}

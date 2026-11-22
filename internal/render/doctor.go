@@ -57,6 +57,10 @@ func (p *printer) doctor(r Report) {
 	sep := " " + p.dot() + " "
 	mode := map[bool]string{true: "offline", false: "online"}[r.Offline]
 	p.printf("agentctl doctor%s%s%s%s\n\n", sep, rules.WindowText(window), sep, mode)
+	if r.Inventory && len(r.Credentials) > 0 {
+		p.inventory(r)
+		p.printf("\n")
+	}
 	switch {
 	case len(r.Credentials) == 0 && len(r.Findings) == 0:
 		p.printf("No credentials found.\n")

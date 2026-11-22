@@ -14,6 +14,7 @@ type Report struct {
 	GeneratedAt   time.Time
 	Command       string
 	Offline       bool
+	Inventory     bool // doctor text only: also print the credential list
 	WindowDays    int
 	WindowHours   int
 	HistoryDays   int

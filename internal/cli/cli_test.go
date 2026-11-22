@@ -47,6 +47,17 @@ func TestOptionsMapping(t *testing.T) {
 	}
 }
 
+func TestInventoryFlagIsDoctorOnly(t *testing.T) {
+	f := &fake{}
+	if got, _, _ := drive(f, "doctor", "--inventory"); got != 0 || len(f.calls) != 1 || !f.calls[0].Inventory {
+		t.Errorf("doctor --inventory: status %d calls %+v", got, f.calls)
+	}
+	f = &fake{}
+	if got, _, errb := drive(f, "inventory", "--inventory"); got != 2 || len(f.calls) != 0 || !strings.Contains(errb.String(), "unknown flag") {
+		t.Errorf("inventory --inventory: status %d calls %d err %q", got, len(f.calls), errb.String())
+	}
+}
+
 func TestExecStatusPassesThroughUntouched(t *testing.T) {
 	for _, s := range []int{0, 1, 2} {
 		f := &fake{status: s}

@@ -7,6 +7,7 @@ import (
 
 type commonFlags struct {
 	offline, yes, json bool
+	inventory          bool // registered by doctor only
 	since              string
 }
 
@@ -24,5 +25,5 @@ func (f *commonFlags) options(command string) (run.Options, error) {
 	if err != nil {
 		return run.Options{}, err
 	}
-	return run.Options{Command: command, Offline: f.offline, Yes: f.yes, JSON: f.json, Since: since}, nil
+	return run.Options{Command: command, Offline: f.offline, Yes: f.yes, JSON: f.json, Inventory: f.inventory, Since: since}, nil
 }
