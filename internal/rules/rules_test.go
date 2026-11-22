@@ -68,7 +68,7 @@ func cred(access model.AgentAccess, blocked bool) model.Credential {
 }
 
 func agentIn(u usage.Usage) AgentInput {
-	return AgentInput{Name: "claude-code", Usage: u, BlockAdvice: func(tool string) string { return "block " + tool }}
+	return AgentInput{Name: "claude-code", Usage: u, BlockAdvice: func(c model.Credential) string { return "block " + c.Tool }}
 }
 
 func run(c model.Credential, a AgentInput, r ToolRule) model.Finding {

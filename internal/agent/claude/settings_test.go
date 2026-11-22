@@ -307,3 +307,29 @@ func TestLoadUnknownDefaultModeKeepsCurrentMode(t *testing.T) {
 		t.Errorf("notes = %v", s.Notes)
 	}
 }
+
+func TestClassifyMCP(t *testing.T) {
+	mcp := model.Credential{Tool: "mcp", ID: "filesystem"}
+	cases := []struct {
+		name string
+		s    Settings
+		c    model.Credential
+		want model.AgentAccess
+	}{
+		{"deny server", Settings{Deny: []string{"mcp__filesystem"}}, mcp, model.AccessDenied},
+		{"deny server wildcard", Settings{Deny: []string{"mcp__filesystem__*"}}, mcp, model.AccessDenied},
+		{"deny one tool", Settings{Deny: []string{"mcp__filesystem__read"}}, mcp, model.AccessAsks},
+		{"deny other server", Settings{Deny: []string{"mcp__other"}}, mcp, model.AccessAsks},
+		{"prefix trap", Settings{Deny: []string{"mcp__filesystem2"}}, mcp, model.AccessAsks},
+		{"bash rule", Settings{Deny: []string{"Bash(mcp:*)"}}, mcp, model.AccessAsks},
+		{"allow", Settings{Allow: []string{"mcp__filesystem"}}, mcp, model.AccessAllowed},
+		{"ask", Settings{Ask: []string{"mcp__filesystem"}}, mcp, model.AccessAsks},
+		{"dontAsk", Settings{DefaultMode: "dontAsk"}, mcp, model.AccessDenied},
+		{"mcp rule on aws", Settings{Deny: []string{"mcp__filesystem"}}, model.Credential{Tool: "aws"}, model.AccessAsks},
+	}
+	for _, tc := range cases {
+		if got, _ := tc.s.Classify(tc.c, "/h"); got != tc.want {
+			t.Errorf("%s: got %v want %v", tc.name, got, tc.want)
+		}
+	}
+}

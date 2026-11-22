@@ -28,7 +28,7 @@ type AgentInput struct {
 	Name              string
 	Usage             usage.Usage
 	UnrestrictedShell bool
-	BlockAdvice       func(tool string) string
+	BlockAdvice       func(c model.Credential) string
 }
 
 // Risk is one thing a tool rule found. A Risk with Severity SevOK only adds its Details.
@@ -230,7 +230,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		}
 		f.Advice = append(f.Advice, adv...)
 	} else if needBlock && a.BlockAdvice != nil { // usageAdvice already carries block advice when it ran
-		if block := a.BlockAdvice(c.Tool); block != "" {
+		if block := a.BlockAdvice(c); block != "" {
 			f.Advice = append(f.Advice, block, advisory)
 		}
 	}
@@ -248,7 +248,7 @@ func usageAdvice(c model.Credential, a AgentInput, rule ToolRule, use AgentUse, 
 	}
 	var block string
 	if a.BlockAdvice != nil {
-		block = a.BlockAdvice(c.Tool)
+		block = a.BlockAdvice(c)
 	}
 	var out []string
 	if block != "" {

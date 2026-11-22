@@ -98,8 +98,8 @@ func (a *fakeAgent) Classify(model.Credential) model.AgentState {
 	}
 	return s
 }
-func (a *fakeAgent) BlockAdvice(string) string { return "block it" }
-func (a *fakeAgent) Posture() agent.Posture    { return a.posture }
+func (a *fakeAgent) BlockAdvice(model.Credential) string { return "block it" }
+func (a *fakeAgent) Posture() agent.Posture              { return a.posture }
 
 func cred(tool, id string) model.Credential {
 	return model.Credential{Tool: tool, ID: id, Label: "label " + id, Kind: "key", Source: "file"}
