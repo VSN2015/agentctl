@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/scan"
@@ -58,21 +59,23 @@ func TestDiscoverServers(t *testing.T) {
 }
 
 func TestDiscoverNames(t *testing.T) {
-	creds, err := discover(t, `{"mcpServers":{"my server.v2":{},"\u001b[31mred":{},"":{},"a b":{},"a.b":{}}}`)
+	creds, err := discover(t, `{"mcpServers":{"my server.v2":{},"\u001b[31mred":{},"":{},"a b":{},"a.b":{},"x\u202ey":{}}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]string{}
 	for _, c := range creds {
 		got[c.ID] = c.Label
-		if strings.ContainsRune(c.Label, 0x1b) {
-			t.Errorf("label not sanitized: %q", c.Label)
+		for _, r := range c.Label {
+			if r == 0x1b || r == 0x202e || unicode.IsControl(r) {
+				t.Errorf("label not sanitized: %q", c.Label)
+			}
 		}
 	}
 	if got["my_server_v2"] != "my server.v2" {
 		t.Errorf("got %v", got)
 	}
-	if _, ok := got[""]; ok || len(creds) != 3 { // my_server_v2, _[31mred, a_b
+	if _, ok := got[""]; ok || len(creds) != 4 { // my_server_v2, __31mred, a_b, x_y
 		t.Errorf("creds %+v", creds)
 	}
 }

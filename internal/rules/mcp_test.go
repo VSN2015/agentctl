@@ -79,3 +79,25 @@ func TestMCPAttributeDoubleUnderscore(t *testing.T) {
 		t.Fatalf("no calls should be unused: %v", f.Rules)
 	}
 }
+
+func TestMCPAttributeTrailingUnderscore(t *testing.T) {
+	x := Context{MCP: mcpCalls(2, "caf", "_read")}
+	own, un := MCPRule{}.Attribute(mcpCred("caf_"), nil, x)
+	if len(own) != 0 || un != 2 {
+		t.Fatalf("caf_: own=%d un=%d", len(own), un)
+	}
+	own, un = MCPRule{}.Attribute(mcpCred("caf"), nil, x)
+	if len(own) != 2 || un != 0 {
+		t.Fatalf("caf: own=%d un=%d", len(own), un)
+	}
+	u := hist(45)
+	u.MCP = x.MCP
+	if f := run(mcpCred("caf_"), agentIn(u), MCPRule{}); has(f.Rules, "usage.unused") {
+		t.Fatalf("called server reported unused: %v", f.Rules)
+	}
+	// known limit: the reader drops calls with an empty server, so an ID starting with __ is never seen
+	own, un = MCPRule{}.Attribute(mcpCred("__x"), nil, Context{MCP: mcpCalls(2, "", "x")})
+	if len(own) != 0 || un != 0 {
+		t.Fatalf("__x: own=%d un=%d", len(own), un)
+	}
+}

@@ -14,11 +14,12 @@ func (MCPRule) Tool() string { return "mcp" }
 
 // Attribute ignores the shell calls: MCP use arrives in x.MCP, matched to the server by name.
 func (MCPRule) Attribute(c model.Credential, _ []usage.Call, x Context) ([]usage.Call, int) {
-	if prefix, _, ok := strings.Cut(c.ID, "__"); ok {
-		// shortcut: the reader cannot tell my__server calls from calls to a server named my, upgrade when the reader keeps the full tool name.
+	// seen is what the reader records as Server for a call to this server (text before the first "__").
+	// shortcut: the reader cannot tell my__server or caf_ calls from calls to a server named my or caf, and never sees an ID starting with __ (empty server is dropped); upgrade when the reader keeps the full tool name.
+	if seen, _, _ := strings.Cut(c.ID+"__", "__"); seen != c.ID {
 		un := 0
 		for _, m := range x.MCP {
-			if m.Server == prefix {
+			if seen != "" && m.Server == seen {
 				un++
 			}
 		}
