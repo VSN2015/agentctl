@@ -56,3 +56,26 @@ func TestMCPEvaluate(t *testing.T) {
 		t.Fatalf("other server: %q", f.Used)
 	}
 }
+
+func TestMCPAttributeDoubleUnderscore(t *testing.T) {
+	x := Context{MCP: append(mcpCalls(2, "my", "read"), mcpCalls(1, "other", "read")...)}
+	own, un := MCPRule{}.Attribute(mcpCred("my__server"), nil, x)
+	if len(own) != 0 || un != 2 {
+		t.Fatalf("my__server: own=%d un=%d", len(own), un)
+	}
+	own, un = MCPRule{}.Attribute(mcpCred("my"), nil, x)
+	if len(own) != 2 || un != 0 {
+		t.Fatalf("my: own=%d un=%d", len(own), un)
+	}
+	with := func(m []usage.MCPCall) AgentInput {
+		u := hist(45)
+		u.MCP = m
+		return agentIn(u)
+	}
+	if f := run(mcpCred("my__server"), with(mcpCalls(2, "my", "read")), MCPRule{}); has(f.Rules, "usage.unused") {
+		t.Fatalf("called server reported unused: %v", f.Rules)
+	}
+	if f := run(mcpCred("my__server"), with(nil), MCPRule{}); !has(f.Rules, "usage.unused") {
+		t.Fatalf("no calls should be unused: %v", f.Rules)
+	}
+}
