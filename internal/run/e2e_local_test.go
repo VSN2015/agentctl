@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -265,11 +266,19 @@ func TestE2EMCPServers(t *testing.T) {
 	if f := m["claude-code:mcp:blocked"]; f.Access != "denied" {
 		t.Errorf("blocked: %+v", f)
 	}
+	mcpGroup := regexp.MustCompile(`(?m)^MCP$\n(?:  .*\n)*?  filesystem - stdio$`)
 	code, out, errb := runLocal(t, dir, nil, run.Options{Command: "inventory", Offline: true, Since: 720 * time.Hour})
-	if code != 0 || !strings.Contains(out, "MCP") || !strings.Contains(out, "filesystem") || strings.Contains(out+errb, canary) {
+	if code != 0 || !mcpGroup.MatchString(out) || strings.Contains(out+errb, canary) {
 		t.Errorf("inventory exit %d out %q err %q", code, out, errb)
 	}
-	_, text, _ := runLocal(t, dir, nil, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour})
+	// the matcher must not be satisfied by a path that merely contains the test name
+	if mcpGroup.MatchString("Note: /tmp/TestE2EMCPServers/x\nNo credentials found.\n") {
+		t.Error("MCP group matcher accepts output without an MCP group")
+	}
+	code, text, errb := runLocal(t, dir, nil, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour})
+	if code != 0 || strings.Contains(text+errb, canary) {
+		t.Errorf("doctor text exit %d out %q err %q", code, text, errb)
+	}
 	t.Logf("doctor text:\n%s", text)
 
 	write(time.Now().Add(-5 * 24 * time.Hour))
