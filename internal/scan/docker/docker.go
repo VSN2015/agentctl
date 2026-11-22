@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -23,6 +24,8 @@ import (
 	"github.com/VSN2015/agentctl/internal/model"
 	"github.com/VSN2015/agentctl/internal/scan"
 )
+
+var schemeRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*$`)
 
 type Scanner struct {
 	systemSocket string // tests override this
@@ -49,7 +52,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		path, ok := strings.CutPrefix(h, "unix://")
 		if !ok {
 			scheme, _, found := strings.Cut(h, "://")
-			if !found {
+			if !found || !schemeRe.MatchString(scheme) {
 				scheme = "non-unix"
 			}
 			return nil, fmt.Errorf("DOCKER_HOST is a %s endpoint, not a unix socket; not checked", model.Sanitize(scheme))

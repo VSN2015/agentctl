@@ -20,7 +20,8 @@ func emptyHomeIO(t *testing.T) (IO, *bytes.Buffer, *bytes.Buffer) {
 	dir := t.TempDir()
 	env := map[string]string{"HOME": dir, "CLAUDE_CONFIG_DIR": dir, "AWS_CONFIG_FILE": filepath.Join(dir, "a"),
 		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(dir, "b"), "GH_CONFIG_DIR": dir, "XDG_CONFIG_HOME": dir,
-		"HISTFILE": filepath.Join(dir, "h"), "ZDOTDIR": dir}
+		"HISTFILE": filepath.Join(dir, "h"), "ZDOTDIR": dir,
+		"DOCKER_HOST": "unix://" + filepath.Join(dir, "docker.sock")}
 	io, out, errb := newIO()
 	io.Getenv = func(k string) string { return env[k] }
 	io.Home, io.Cwd = dir, dir

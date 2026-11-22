@@ -220,3 +220,24 @@ func TestResolveSkips(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestDiscoverDockerHostOddValueNeverEchoed(t *testing.T) {
+	v := "admin:CANARY-PW@host:2375/x?u=http://y"
+	creds, err := New().Discover(scan.Env{Getenv: func(k string) string {
+		if k == "DOCKER_HOST" {
+			return v
+		}
+		return ""
+	}})
+	if len(creds) != 0 || err == nil {
+		t.Fatalf("creds %v err %v", creds, err)
+	}
+	for _, bad := range []string{"CANARY", "admin", "host"} {
+		if strings.Contains(err.Error(), bad) {
+			t.Errorf("error echoes %q: %v", bad, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "non-unix") {
+		t.Errorf("error %v lacks non-unix", err)
+	}
+}
