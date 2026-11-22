@@ -72,6 +72,28 @@ func TestParseGH(t *testing.T) {
 	}
 }
 
+func TestParseDocker(t *testing.T) {
+	tests := []struct {
+		cmd  string
+		want []Invocation
+	}{
+		{"docker ps", []Invocation{{Tool: "docker"}}},
+		{"docker-compose up -d", []Invocation{{Tool: "docker"}}},
+		{"docker compose up", []Invocation{{Tool: "docker"}}},
+		{"sudo docker run --rm x && docker ps", []Invocation{{Tool: "docker"}}}, // one per command
+		{"echo $(docker ps -q)", []Invocation{{Tool: "docker"}}},
+		{"cd /srv/docker/app && ls", nil},
+		{"dockerd --debug", nil},
+		{"mydocker ps", nil},
+		{"aws s3 ls; docker ps", []Invocation{{Tool: "aws"}, {Tool: "docker"}}},
+	}
+	for _, tc := range tests {
+		if got := Parse(tc.cmd); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: got %+v, want %+v", tc.cmd, got, tc.want)
+		}
+	}
+}
+
 func TestParseNoneForOtherTools(t *testing.T) {
 	for _, cmd := range []string{"ls -la", "git push", ""} {
 		if got := Parse(cmd); len(got) != 0 {
