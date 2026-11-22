@@ -4,7 +4,7 @@
 
 AI coding agents run on machines that hold logged-in command-line tools and long-lived credentials. `agentctl` shows, read-only and on your own machine, what the agent can reach: which cloud and code-hosting credentials exist, whether the agent is allowed to use them, how much it actually does, and what to tighten.
 
-Supported today: one agent (Claude Code) and five tools (AWS, GitHub through `gh`, the Docker socket, kubectl contexts, and Claude Code MCP servers; offline checks only, and MCP covers user and per-project servers in `.claude.json`, not `.mcp.json`, plugin servers, claude.ai connectors, managed MCP files or `disabledMcpServers`), on macOS and Linux, on laptops and on servers.
+Supported today: one agent (Claude Code) and five tools (AWS, GitHub through `gh`, the Docker socket, kubectl contexts, and Claude Code MCP servers), on macOS and Linux, on laptops and on servers. The Docker socket, kubectl contexts and MCP servers are checked offline only; MCP covers user and per-project servers in `.claude.json`, not `.mcp.json`, plugin servers, claude.ai connectors, managed MCP files or `disabledMcpServers`.
 
 ## What a run looks like
 
