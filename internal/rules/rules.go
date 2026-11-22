@@ -22,13 +22,14 @@ type Context struct {
 	Dev         devuse.History
 	Getenv      func(string) string
 	HistoryDays int
+	MCP         []usage.MCPCall // the agent's MCP calls, read only by the MCP rule
 }
 
 type AgentInput struct {
 	Name              string
 	Usage             usage.Usage
 	UnrestrictedShell bool
-	BlockAdvice       func(tool string) string
+	BlockAdvice       func(c model.Credential) string
 }
 
 // Risk is one thing a tool rule found. A Risk with Severity SevOK only adds its Details.
@@ -90,7 +91,7 @@ func Evaluate(in Input, tools []ToolRule) []model.Finding {
 	out := []model.Finding{}
 	for _, a := range in.Agents {
 		x := Context{Agent: a.Name, Now: in.Now, Window: in.Window, Offline: in.Offline, Dev: in.Dev,
-			Getenv: in.Getenv, HistoryDays: a.Usage.HistoryDays(in.Now)}
+			Getenv: in.Getenv, HistoryDays: a.Usage.HistoryDays(in.Now), MCP: a.Usage.MCP}
 		for _, c := range in.Creds {
 			out = append(out, evalOne(c, a, byTool[c.Tool], x))
 		}
@@ -230,7 +231,7 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		}
 		f.Advice = append(f.Advice, adv...)
 	} else if needBlock && a.BlockAdvice != nil { // usageAdvice already carries block advice when it ran
-		if block := a.BlockAdvice(c.Tool); block != "" {
+		if block := a.BlockAdvice(c); block != "" {
 			f.Advice = append(f.Advice, block, advisory)
 		}
 	}
@@ -248,7 +249,7 @@ func usageAdvice(c model.Credential, a AgentInput, rule ToolRule, use AgentUse, 
 	}
 	var block string
 	if a.BlockAdvice != nil {
-		block = a.BlockAdvice(c.Tool)
+		block = a.BlockAdvice(c)
 	}
 	var out []string
 	if block != "" {

@@ -43,10 +43,10 @@ func TestAgentReadUsageUsesConfigDir(t *testing.T) {
 
 func TestAgentBlockAdvice(t *testing.T) {
 	a := New(t.TempDir(), t.TempDir(), "/h", "test")
-	if got, want := a.BlockAdvice("aws"), `deny "Bash(aws:*)" in ~/.claude/settings.json`; got != want {
+	if got, want := a.BlockAdvice(model.Credential{Tool: "aws"}), `deny "Bash(aws:*)" in ~/.claude/settings.json`; got != want {
 		t.Errorf("got %q", got)
 	}
-	if got := a.BlockAdvice("gh"); !strings.Contains(got, `"Bash(gh:*)"`) {
+	if got := a.BlockAdvice(model.Credential{Tool: "gh"}); !strings.Contains(got, `"Bash(gh:*)"`) {
 		t.Errorf("got %q", got)
 	}
 }
@@ -58,5 +58,23 @@ func TestAgentPosture(t *testing.T) {
 	p := New(cfg, proj, "/h", "test").Posture()
 	if !p.UnrestrictedShell || len(p.Notes) != 1 || !strings.Contains(p.Notes[0], bad) || strings.Contains(p.Notes[0], "CANARY") {
 		t.Errorf("posture = %+v", p)
+	}
+}
+
+func TestAgentBlockAdviceMCP(t *testing.T) {
+	a := New(t.TempDir(), t.TempDir(), "/h", "test")
+	got := a.BlockAdvice(model.Credential{Tool: "mcp", ID: "filesystem"})
+	if want := `deny "mcp__filesystem" in ~/.claude/settings.json`; got != want {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestAgentBlockAdviceMCPSeenServer(t *testing.T) {
+	a := New(t.TempDir(), t.TempDir(), "/h", "test")
+	if got, want := a.BlockAdvice(model.Credential{Tool: "mcp", ID: "a__b"}), `deny "mcp__a" in ~/.claude/settings.json (this also covers every server Claude Code calls "a")`; got != want {
+		t.Errorf("got %q", got)
+	}
+	if got := a.BlockAdvice(model.Credential{Tool: "mcp", ID: "__x"}); got != "" {
+		t.Errorf("got %q, want empty", got)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/VSN2015/agentctl/internal/confirm"
 	"github.com/VSN2015/agentctl/internal/devuse"
 	"github.com/VSN2015/agentctl/internal/model"
+	"github.com/VSN2015/agentctl/internal/render"
 	"github.com/VSN2015/agentctl/internal/rules"
 	"github.com/VSN2015/agentctl/internal/scan"
 	"github.com/VSN2015/agentctl/internal/usage"
@@ -97,8 +99,8 @@ func (a *fakeAgent) Classify(model.Credential) model.AgentState {
 	}
 	return s
 }
-func (a *fakeAgent) BlockAdvice(string) string { return "block it" }
-func (a *fakeAgent) Posture() agent.Posture    { return a.posture }
+func (a *fakeAgent) BlockAdvice(model.Credential) string { return "block it" }
+func (a *fakeAgent) Posture() agent.Posture              { return a.posture }
 
 func cred(tool, id string) model.Credential {
 	return model.Credential{Tool: tool, ID: id, Label: "label " + id, Kind: "key", Source: "file"}
@@ -597,5 +599,79 @@ func TestHistoryNotes(t *testing.T) {
 		if c.want == "" && (strings.Contains(all, "agent history covers") || strings.Contains(all, "no agent history")) {
 			t.Errorf("%s: unexpected history note %q", c.name, rep.Notes)
 		}
+	}
+}
+
+type localScanner struct{ *fakeScanner }
+
+func (localScanner) LocalOnly() {}
+
+func TestLocalOnlyScannerNeverPromptsOrResolves(t *testing.T) {
+	r := newRig()
+	r.sc.resolve = func(context.Context, model.Credential) (*model.Resolution, error) {
+		t.Fatal("Resolve called")
+		return nil, nil
+	}
+	d := r.deps()
+	d.Scanners = []scan.Scanner{localScanner{r.sc}}
+	d.Confirm = func([]string) (bool, error) { return false, confirm.ErrNoTerminal } // a prompt here would be exit 2
+	rep, err := Collect(context.Background(), doctor(), d)
+	if err != nil || rep.Offline || len(rep.Credentials) != 1 || rep.Credentials[0].Resolved != nil || r.sc.resolved != 0 {
+		t.Fatalf("err %v report %+v", err, rep)
+	}
+	if n := strings.Join(rep.Notes, "\n"); strings.Contains(n, "online check") {
+		t.Errorf("notes: %s", n)
+	}
+	if code := Execute(context.Background(), doctor(), d); code != 0 {
+		t.Errorf("exit %d err %q", code, r.errb)
+	}
+}
+
+func TestLocalOnlyNote(t *testing.T) {
+	const note = "Fakery: checked locally only; there is nothing to check online"
+	count := func(rep render.Report) (n int) {
+		for _, x := range rep.Notes {
+			if x == note {
+				n++
+			}
+		}
+		return n
+	}
+	r := newRig()
+	r.sc.creds = []model.Credential{cred("fake", "c1"), cred("fake", "c2")}
+	d := r.deps()
+	d.Scanners = []scan.Scanner{localScanner{r.sc}}
+	rep, err := Collect(context.Background(), inventory(), d)
+	if err != nil || count(rep) != 1 {
+		t.Errorf("online: want the note once: %v %q", err, rep.Notes)
+	}
+	rep, err = Collect(context.Background(), Options{Command: "inventory", Offline: true, Since: 30 * 24 * time.Hour}, d)
+	if err != nil || count(rep) != 0 {
+		t.Errorf("offline: %v %q", err, rep.Notes)
+	}
+	r.sc.creds = nil
+	rep, err = Collect(context.Background(), inventory(), d)
+	if err != nil || count(rep) != 0 {
+		t.Errorf("no credentials: %v %q", err, rep.Notes)
+	}
+}
+
+func TestLocalOnlyMixedWithOnlineScanner(t *testing.T) {
+	r := newRig() // r.sc provider "Fakery"
+	online := &fakeScanner{name: "other", provider: "GitHub", creds: []model.Credential{cred("other", "o1")}, log: &r.log}
+	d := r.deps()
+	d.Scanners = []scan.Scanner{localScanner{r.sc}, online}
+	d.Rules = append(d.Rules, fakeRule{"other", model.SevMed})
+	var got, msgs []string
+	d.Confirm = func(p []string) (bool, error) { got = p; return true, nil }
+	d.Progress = func(m string) { msgs = append(msgs, m) }
+	if _, err := Collect(context.Background(), inventory(), d); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "GitHub" || r.sc.resolved != 0 || online.resolved != 1 {
+		t.Errorf("providers %v local resolved %d online resolved %d", got, r.sc.resolved, online.resolved)
+	}
+	if !slices.Contains(msgs, "checking GitHub label o1 (1/1)") { // the counter counts only credentials that are checked
+		t.Errorf("progress %q", msgs)
 	}
 }

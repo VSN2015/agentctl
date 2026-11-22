@@ -13,7 +13,7 @@ type Agent interface {
 	Name() string                                                             // "claude-code"
 	ReadUsage(ctx context.Context, since, now time.Time) (usage.Usage, error) // every project on the machine; Usage.Agent == Name()
 	Classify(c model.Credential) model.AgentState                             // Agent == Name(); Access is about the tool only; FileBlocked is separate
-	BlockAdvice(tool string) string                                           // agent-specific text for blocking a tool; excludes the advisory sentence (the rules engine adds it)
+	BlockAdvice(c model.Credential) string                                    // agent-specific text for blocking a tool; excludes the advisory sentence (the rules engine adds it)
 	Posture() Posture
 }
 

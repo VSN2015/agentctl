@@ -69,6 +69,7 @@ func New(t testing.TB, unreadableAWS bool) Home {
 		"GH_CONFIG_DIR":               filepath.Join(dir, "gh"), "XDG_CONFIG_HOME": filepath.Join(dir, "xdg"),
 		"HISTFILE": filepath.Join(dir, ".no_histfile"), "ZDOTDIR": dir,
 		"AWS_ACCESS_KEY_ID": EnvKeyID, "AWS_SECRET_ACCESS_KEY": EnvSecret, "AWS_SESSION_TOKEN": EnvSession,
-		"GH_TOKEN": EnvGHToken,
+		"GH_TOKEN":    EnvGHToken,
+		"DOCKER_HOST": "unix://" + filepath.Join(dir, "docker.sock"),
 	}}
 }
