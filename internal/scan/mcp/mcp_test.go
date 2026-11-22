@@ -112,10 +112,13 @@ func TestDiscoverNeverReturnsSecrets(t *testing.T) {
 }
 
 func TestDiscoverBadFiles(t *testing.T) {
+	creds, err := discover(t, strings.Repeat(" ", model.MaxFileSize+1))
+	if creds != nil || err == nil || err.Error() != "Claude Code configuration is larger than 1 MiB; not read" {
+		t.Errorf("toolarge: %+v %v", creds, err)
+	}
 	for name, content := range map[string]string{
-		"invalid":  `{"CANARY-secret": `,
-		"array":    `["CANARY-secret"]`,
-		"toolarge": strings.Repeat(" ", model.MaxFileSize+1),
+		"invalid": `{"CANARY-secret": `,
+		"array":   `["CANARY-secret"]`,
 	} {
 		creds, err := discover(t, content)
 		if creds != nil || err == nil || err.Error() != badMsg {
@@ -146,7 +149,7 @@ func TestDiscoverBadFiles(t *testing.T) {
 	if creds, err := New().Discover(envFor("", "")); creds != nil || err != nil {
 		t.Errorf("no home: %+v %v", creds, err)
 	}
-	creds, err := discover(t, `{"mcpServers":{"n":{"type":7}}}`)
+	creds, err = discover(t, `{"mcpServers":{"n":{"type":7}}}`)
 	if err != nil || len(creds) != 1 || creds[0].Kind != "unknown" {
 		t.Errorf("numeric type: %+v %v", creds, err)
 	}

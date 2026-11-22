@@ -97,7 +97,11 @@ func TestMCPAttributeTrailingUnderscore(t *testing.T) {
 	}
 	// known limit: the reader drops calls with an empty server, so an ID starting with __ is never seen
 	own, un = MCPRule{}.Attribute(mcpCred("__x"), nil, Context{MCP: mcpCalls(2, "", "x")})
-	if len(own) != 0 || un != 0 {
+	if len(own) != 0 || un != 1 {
 		t.Fatalf("__x: own=%d un=%d", len(own), un)
+	}
+	u = hist(45)
+	if f := run(mcpCred("__x"), agentIn(u), MCPRule{}); has(f.Rules, "usage.unused") {
+		t.Fatalf("unattributable server reported unused: %v", f.Rules)
 	}
 }

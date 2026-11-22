@@ -326,6 +326,11 @@ func TestClassifyMCP(t *testing.T) {
 		{"ask", Settings{Ask: []string{"mcp__filesystem"}}, mcp, model.AccessAsks},
 		{"dontAsk", Settings{DefaultMode: "dontAsk"}, mcp, model.AccessDenied},
 		{"mcp rule on aws", Settings{Deny: []string{"mcp__filesystem"}}, model.Credential{Tool: "aws"}, model.AccessAsks},
+		{"double underscore id, one-tool rule", Settings{Deny: []string{"mcp__a__b"}}, model.Credential{Tool: "mcp", ID: "a__b"}, model.AccessAsks},
+		{"double underscore id, server rule", Settings{Deny: []string{"mcp__a"}}, model.Credential{Tool: "mcp", ID: "a__b"}, model.AccessDenied},
+		{"trailing underscore id, seen rule", Settings{Deny: []string{"mcp__caf"}}, model.Credential{Tool: "mcp", ID: "caf_"}, model.AccessDenied},
+		{"trailing underscore id, own rule", Settings{Deny: []string{"mcp__caf_"}}, model.Credential{Tool: "mcp", ID: "caf_"}, model.AccessAsks},
+		{"leading underscores id", Settings{Deny: []string{"mcp____x"}}, model.Credential{Tool: "mcp", ID: "__x"}, model.AccessAsks},
 	}
 	for _, tc := range cases {
 		if got, _ := tc.s.Classify(tc.c, "/h"); got != tc.want {

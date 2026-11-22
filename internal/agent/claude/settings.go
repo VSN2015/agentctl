@@ -139,6 +139,12 @@ func mcpMatches(rule, server string) bool {
 	return rule == "mcp__"+server || rule == "mcp__"+server+"__*"
 }
 
+// mcpSeen is the server name Claude Code (and the session reader) sees for an MCP ID: the text before the first "__".
+func mcpSeen(id string) string {
+	seen, _, _ := strings.Cut(id+"__", "__")
+	return seen
+}
+
 func anyMatch(rules []string, f func(string) bool) bool {
 	for _, r := range rules {
 		if f(r) {
@@ -148,12 +154,13 @@ func anyMatch(rules []string, f func(string) bool) bool {
 	return false
 }
 
-// Classify returns the agent's access to the credential's tool (Bash rules only) and whether a
+// Classify returns the agent's access to the credential's tool (Bash rules, or mcp__ rules for MCP credentials) and whether a
 // Read deny covers any of the credential's files. Neither result affects the other.
 func (s Settings) Classify(c model.Credential, home string) (model.AgentAccess, bool) {
 	tool := func(r string) bool { return bashMatches(r, c.Tool) }
 	if c.Tool == mcpTool {
-		tool = func(r string) bool { return mcpMatches(r, c.ID) }
+		seen := mcpSeen(c.ID)
+		tool = func(r string) bool { return seen != "" && mcpMatches(r, seen) }
 	}
 	mode := s.DefaultMode
 	var access model.AgentAccess

@@ -54,6 +54,9 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	if errors.Is(err, os.ErrNotExist) || (err == nil && len(bytes.TrimSpace(buf)) == 0) {
 		return nil, nil
 	}
+	if errors.Is(err, model.ErrTooLarge) {
+		return nil, errors.New("Claude Code configuration is larger than 1 MiB; not read")
+	}
 	if err != nil {
 		return nil, errBad
 	}

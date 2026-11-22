@@ -68,3 +68,13 @@ func TestAgentBlockAdviceMCP(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestAgentBlockAdviceMCPSeenServer(t *testing.T) {
+	a := New(t.TempDir(), t.TempDir(), "/h", "test")
+	if got, want := a.BlockAdvice(model.Credential{Tool: "mcp", ID: "a__b"}), `deny "mcp__a" in ~/.claude/settings.json (this also covers every server Claude Code calls "a")`; got != want {
+		t.Errorf("got %q", got)
+	}
+	if got := a.BlockAdvice(model.Credential{Tool: "mcp", ID: "__x"}); got != "" {
+		t.Errorf("got %q, want empty", got)
+	}
+}
