@@ -24,7 +24,7 @@ var (
 	profileRe = regexp.MustCompile(`(?:--profile[ =]|AWS_PROFILE=)["']?(` + tokenChars + `)`)
 	hostRe    = regexp.MustCompile(`(?:--hostname[ =]|GH_HOST=)["']?(` + tokenChars + `)`)
 	// shortcut: `kubectl config use-context X` is not read (counts as no context), upgrade if it matters.
-	contextRe = regexp.MustCompile(`(?:--context[ =])["']?(` + tokenChars + `)`)
+	contextRe = regexp.MustCompile(`kubectl(?:\s[^;&|\n]*?)?\s--context[ =]["']?(` + tokenChars + `)`)
 )
 
 func toolRe(name, after string) *regexp.Regexp {
@@ -40,6 +40,8 @@ func toolRe(name, after string) *regexp.Regexp {
 // upgrade to a real shell tokenizer if false "used" results prove common. When
 // calls outnumber profile/host matches a "" target is added too, so
 // `export AWS_PROFILE=p; aws a; aws b` also counts as a default-profile use.
+// Known limits of the profile/host/context capture: a quoted context name containing a space is
+// captured up to the space; calls by absolute path (/usr/local/bin/kubectl) and shell aliases are not seen.
 func Parse(command string) []Invocation {
 	var out []Invocation
 	seen := map[Invocation]bool{}

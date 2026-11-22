@@ -10,7 +10,6 @@ package kubectl
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -81,11 +80,11 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	}
 
 	var creds []model.Credential
-	var errs []error
+	var errs []string
 	seen := map[string]bool{}
 	for _, p := range paths {
 		if !filepath.IsAbs(p) {
-			errs = append(errs, fmt.Errorf("kubeconfig path is not absolute: %s", model.Sanitize(p)))
+			errs = append(errs, "kubeconfig path is not absolute: "+model.Sanitize(p))
 			continue
 		}
 		buf, err := model.ReadRegularFile(p)
@@ -97,7 +96,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 			err = yaml.Unmarshal(buf, &kc)
 		}
 		if err != nil { // never include err: yaml quotes file content
-			errs = append(errs, fmt.Errorf("could not read or parse %s", model.Sanitize(p)))
+			errs = append(errs, "could not read or parse "+model.Sanitize(p))
 			continue
 		}
 		for _, c := range kc.Contexts {
@@ -121,5 +120,8 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		}
 	}
 	sort.Slice(creds, func(i, j int) bool { return creds[i].ID < creds[j].ID })
-	return creds, errors.Join(errs...)
+	if len(errs) > 0 { // one line: the note path turns a newline into "?"
+		return creds, errors.New(strings.Join(errs, "; "))
+	}
+	return creds, nil
 }

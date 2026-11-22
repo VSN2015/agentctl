@@ -163,9 +163,9 @@ func TestE2EKubectlProductionContext(t *testing.T) {
 	}
 	doctor := func() map[string]finding {
 		o := run.Options{Command: "doctor", Offline: true, JSON: true, Since: 720 * time.Hour}
-		code, out, _ := runLocal(t, dir, map[string]string{"KUBECONFIG": cfg}, o)
-		if code != 0 || strings.Contains(out, canary) {
-			t.Fatalf("exit %d out %q", code, out)
+		code, out, errb := runLocal(t, dir, map[string]string{"KUBECONFIG": cfg}, o)
+		if code != 0 || strings.Contains(out+errb, canary) {
+			t.Fatalf("exit %d out %q err %q", code, out, errb)
 		}
 		var doc struct{ Findings []finding }
 		if err := json.Unmarshal([]byte(out), &doc); err != nil {

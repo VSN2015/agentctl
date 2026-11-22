@@ -26,6 +26,7 @@ func write(t *testing.T, dir, name, body string) string {
 }
 
 func scanner(t *testing.T) *Scanner {
+	t.Helper()
 	s := New()
 	s.saToken = filepath.Join(t.TempDir(), "none")
 	return s
@@ -173,6 +174,14 @@ func TestDiscoverBadFiles(t *testing.T) {
 	}
 	if strings.Contains(strings.ReplaceAll(err.Error(), "relative/CANARY-path", ""), "CANARY") {
 		t.Errorf("error leaks content: %v", err)
+	}
+	for _, want := range []string{"yamlbad", "scalar", "adir", "big", "kubeconfig path is not absolute", "; "} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "\n") {
+		t.Errorf("error has a newline: %q", err)
 	}
 	for _, f := range []string{write(t, d, "empty", ""), filepath.Join(d, "missing")} {
 		if creds, err := scanner(t).Discover(env("", map[string]string{"KUBECONFIG": f})); err != nil || len(creds) != 0 {

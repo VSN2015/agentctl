@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -97,5 +96,4 @@ func TestKubectlDeveloperUse(t *testing.T) {
 			t.Errorf("%s undated/unnamed: %+v", id, u)
 		}
 	}
-	_ = strconv.Itoa
 }

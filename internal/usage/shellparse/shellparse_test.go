@@ -112,6 +112,9 @@ func TestParseKubectl(t *testing.T) {
 		{"kubectlx get pods", nil},
 		{"k get pods", nil},
 		{"helm --kube-context prod ls", nil},
+		{"docker --context colima ps && kubectl get pods", []Invocation{{Tool: "docker"}, k("")}},
+		{"istioctl --context prod-mesh x; kubectl get pods", []Invocation{k("")}},
+		{"kubectl get pods; helm --context x ls", []Invocation{k("")}},
 	}
 	for _, tc := range tests {
 		if got := Parse(tc.cmd); !reflect.DeepEqual(got, tc.want) {
