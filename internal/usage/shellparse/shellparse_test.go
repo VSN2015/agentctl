@@ -94,6 +94,32 @@ func TestParseDocker(t *testing.T) {
 	}
 }
 
+func TestParseKubectl(t *testing.T) {
+	k := func(target string) Invocation { return Invocation{Tool: "kubectl", Target: target} }
+	arn := "arn:aws:eks:us-east-1:123456789012:cluster/prod"
+	tests := []struct {
+		cmd  string
+		want []Invocation
+	}{
+		{"kubectl get pods", []Invocation{k("")}},
+		{"kubectl --context prod get pods", []Invocation{k("prod")}},
+		{"kubectl --context=prod get pods", []Invocation{k("prod")}},
+		{`kubectl get pods --context "` + arn + `"`, []Invocation{k(arn)}},
+		{"kubectl --context a get po; kubectl get po", []Invocation{k("a"), k("")}},
+		{"kubectl --context a get po; kubectl --context b get po", []Invocation{k("a"), k("b")}},
+		{"kubectl config use-context prod", []Invocation{k("")}}, // documented limit: names no --context
+		{"kubectl", []Invocation{k("")}},
+		{"kubectlx get pods", nil},
+		{"k get pods", nil},
+		{"helm --kube-context prod ls", nil},
+	}
+	for _, tc := range tests {
+		if got := Parse(tc.cmd); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%q: got %+v, want %+v", tc.cmd, got, tc.want)
+		}
+	}
+}
+
 func TestParseNoneForOtherTools(t *testing.T) {
 	for _, cmd := range []string{"ls -la", "git push", ""} {
 		if got := Parse(cmd); len(got) != 0 {
