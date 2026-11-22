@@ -12,15 +12,16 @@ import (
 	"github.com/VSN2015/agentctl/internal/scan/aws"
 	"github.com/VSN2015/agentctl/internal/scan/docker"
 	"github.com/VSN2015/agentctl/internal/scan/gh"
+	"github.com/VSN2015/agentctl/internal/scan/kubectl"
 )
 
 // Scanners builds the scanners; it makes no network call and reads no credential.
 func Scanners(r scan.Runner) []scan.Scanner {
-	return []scan.Scanner{aws.New(aws.NewSDK()), gh.New(r), docker.New()}
+	return []scan.Scanner{aws.New(aws.NewSDK()), gh.New(r), docker.New(), kubectl.New()}
 }
 
 func ToolRules() []rules.ToolRule {
-	return []rules.ToolRule{rules.AWSRule{}, rules.GHRule{}, rules.DockerRule{}}
+	return []rules.ToolRule{rules.AWSRule{}, rules.GHRule{}, rules.DockerRule{}, rules.KubectlRule{}}
 }
 
 type AgentParams struct {

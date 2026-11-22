@@ -124,3 +124,79 @@ func TestE2EDockerNotFoundWhenHostMissing(t *testing.T) {
 		}
 	}
 }
+
+func TestE2EKubectlProductionContext(t *testing.T) {
+	const canary = "KUBE-TOKEN-CANARY-9f3a"
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, ".kube", "config")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	kc := "apiVersion: v1\nkind: Config\ncurrent-context: dev\n" +
+		"contexts:\n- name: dev\n  context: {cluster: c-dev, user: u}\n- name: production\n  context: {cluster: c-prod, user: u}\n" +
+		"clusters:\n- name: c-dev\n  cluster: {server: https://dev.invalid}\n- name: c-prod\n  cluster: {server: https://prod.invalid}\n" +
+		"users:\n- name: u\n  user: {token: " + canary + "}\n"
+	if err := os.WriteFile(cfg, []byte(kc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().Add(-40 * 24 * time.Hour)
+	line := func(ts time.Time, cmd string) string {
+		b, _ := json.Marshal(map[string]any{"type": "assistant", "timestamp": ts.Format(time.RFC3339Nano),
+			"message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "id": "u" + cmd, "name": "Bash",
+				"input": map[string]any{"command": cmd}}}}})
+		return string(b)
+	}
+	session := filepath.Join(dir, ".claude", "projects", "-p", "s.jsonl")
+	if err := os.MkdirAll(filepath.Dir(session), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(lines ...string) {
+		if err := os.WriteFile(session, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type finding struct {
+		ID      string
+		Rules   []string
+		Details []string
+	}
+	doctor := func() map[string]finding {
+		o := run.Options{Command: "doctor", Offline: true, JSON: true, Since: 720 * time.Hour}
+		code, out, _ := runLocal(t, dir, map[string]string{"KUBECONFIG": cfg}, o)
+		if code != 0 || strings.Contains(out, canary) {
+			t.Fatalf("exit %d out %q", code, out)
+		}
+		var doc struct{ Findings []finding }
+		if err := json.Unmarshal([]byte(out), &doc); err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]finding{}
+		for _, f := range doc.Findings {
+			m[f.ID] = f
+		}
+		return m
+	}
+	has := func(ss []string, s string) bool {
+		for _, x := range ss {
+			if strings.Contains(x, s) {
+				return true
+			}
+		}
+		return false
+	}
+
+	write(line(at, "ls"))
+	m := doctor()
+	if f := m["claude-code:kubectl:production"]; !has(f.Rules, "kubectl.production-context") {
+		t.Errorf("production: %+v", f)
+	}
+	if f := m["claude-code:kubectl:dev"]; !has(f.Rules, "usage.unused") {
+		t.Errorf("dev: %+v", f)
+	}
+
+	write(line(at, "ls"), line(time.Now().Add(-time.Hour), "kubectl get pods"))
+	f := doctor()["claude-code:kubectl:dev"]
+	if !has(f.Details, "Agent ran kubectl 1 time without naming a context") || has(f.Rules, "usage.unused") {
+		t.Errorf("dev unnamed: %+v", f)
+	}
+}
