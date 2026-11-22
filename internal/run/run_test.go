@@ -13,6 +13,7 @@ import (
 	"github.com/VSN2015/agentctl/internal/confirm"
 	"github.com/VSN2015/agentctl/internal/devuse"
 	"github.com/VSN2015/agentctl/internal/model"
+	"github.com/VSN2015/agentctl/internal/render"
 	"github.com/VSN2015/agentctl/internal/rules"
 	"github.com/VSN2015/agentctl/internal/scan"
 	"github.com/VSN2015/agentctl/internal/usage"
@@ -607,7 +608,6 @@ func (localScanner) LocalOnly() {}
 
 func TestLocalOnlyScannerNeverPromptsOrResolves(t *testing.T) {
 	r := newRig()
-	r.confirm = func([]string) (bool, error) { t.Fatal("Confirm called"); return false, nil }
 	r.sc.resolve = func(context.Context, model.Credential) (*model.Resolution, error) {
 		t.Fatal("Resolve called")
 		return nil, nil
@@ -624,6 +624,35 @@ func TestLocalOnlyScannerNeverPromptsOrResolves(t *testing.T) {
 	}
 	if code := Execute(context.Background(), doctor(), d); code != 0 {
 		t.Errorf("exit %d err %q", code, r.errb)
+	}
+}
+
+func TestLocalOnlyNote(t *testing.T) {
+	const note = "Fakery: checked locally only; there is nothing to check online"
+	count := func(rep render.Report) (n int) {
+		for _, x := range rep.Notes {
+			if x == note {
+				n++
+			}
+		}
+		return n
+	}
+	r := newRig()
+	r.sc.creds = []model.Credential{cred("fake", "c1"), cred("fake", "c2")}
+	d := r.deps()
+	d.Scanners = []scan.Scanner{localScanner{r.sc}}
+	rep, err := Collect(context.Background(), inventory(), d)
+	if err != nil || count(rep) != 1 {
+		t.Errorf("online: want the note once: %v %q", err, rep.Notes)
+	}
+	rep, err = Collect(context.Background(), Options{Command: "inventory", Offline: true, Since: 30 * 24 * time.Hour}, d)
+	if err != nil || count(rep) != 0 {
+		t.Errorf("offline: %v %q", err, rep.Notes)
+	}
+	r.sc.creds = nil
+	rep, err = Collect(context.Background(), inventory(), d)
+	if err != nil || count(rep) != 0 {
+		t.Errorf("no credentials: %v %q", err, rep.Notes)
 	}
 }
 

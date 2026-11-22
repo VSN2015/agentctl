@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,6 +129,17 @@ func Collect(ctx context.Context, o Options, d Deps) (render.Report, error) {
 		if !ok {
 			rep.Offline = true
 			rep.Notes = append(rep.Notes, "online checks were declined; showing only what the files show")
+		}
+	}
+	if !rep.Offline {
+		var local []string // providers of local-only scanners that found something, in registry order
+		for i, o := range owners {
+			if _, ok := o.(scan.LocalOnly); ok && !slices.Contains(local, creds[i].Provider) {
+				local = append(local, creds[i].Provider)
+			}
+		}
+		if len(local) > 0 {
+			addNote(&rep, strings.Join(local, ", ")+": checked locally only; there is nothing to check online")
 		}
 	}
 	if !rep.Offline && len(creds) > 0 {
