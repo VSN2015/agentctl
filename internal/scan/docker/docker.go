@@ -5,6 +5,10 @@
 // on macOS), ~/.colima/default/docker.sock and $XDG_RUNTIME_DIR/docker.sock (rootless Linux).
 // Not covered: Docker CLI contexts (~/.docker/config.json), Rancher Desktop, Podman, and tcp://
 // or ssh:// hosts. The probe is a plain connect that sends nothing and closes at once.
+//
+// Known limits: when DOCKER_HOST is set it is the only location checked, so a live default socket
+// is not reported; and the probe is a connect(), which on a host using systemd socket activation
+// can start a stopped Docker daemon.
 package docker
 
 import (
@@ -41,6 +45,22 @@ func (s *Scanner) Resolve(context.Context, model.Credential) (*model.Resolution,
 	return nil, &scan.SkipError{Reason: "nothing to resolve online"}
 }
 
+// classify turns a connect error into the credential kind and note. Only a clearly unreachable
+// socket is downgraded; any other failure keeps it flagged, because a live socket must not be hidden.
+func classify(err error) (kind, note string) {
+	switch {
+	case err == nil:
+		return "socket", ""
+	case errors.Is(err, fs.ErrPermission):
+		return "socket-unreachable", "permission denied"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "socket-unreachable", "nothing is listening"
+	case errors.Is(err, fs.ErrNotExist):
+		return "socket-unreachable", "socket no longer exists"
+	}
+	return "socket", "could not confirm the socket accepts connections"
+}
+
 func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 	getenv := env.Getenv
 	if getenv == nil {
@@ -55,7 +75,7 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 			if !found || !schemeRe.MatchString(scheme) {
 				scheme = "non-unix"
 			}
-			return nil, fmt.Errorf("DOCKER_HOST is a %s endpoint, not a unix socket; not checked", model.Sanitize(scheme))
+			return nil, fmt.Errorf("DOCKER_HOST is a %s endpoint, not a unix socket; not checked, and default socket locations were not checked either", model.Sanitize(scheme))
 		}
 		paths, fromEnv = []string{path}, true
 	} else {
@@ -101,18 +121,14 @@ func (s *Scanner) Discover(env scan.Env) ([]model.Credential, error) {
 		if fromEnv {
 			c.Source, c.EnvVars = "env", []string{"DOCKER_HOST"}
 		}
-		if conn, err := net.DialTimeout("unix", real, time.Second); err == nil {
+		conn, err := net.DialTimeout("unix", real, time.Second)
+		if err == nil {
 			conn.Close()
-		} else {
-			c.Kind = "socket-unreachable"
-			switch {
-			case errors.Is(err, fs.ErrPermission):
-				c.Notes = []string{"permission denied"}
-			case errors.Is(err, syscall.ECONNREFUSED):
-				c.Notes = []string{"nothing is listening"}
-			default:
-				c.Notes = []string{"could not connect"}
-			}
+		}
+		var note string
+		c.Kind, note = classify(err)
+		if note != "" {
+			c.Notes = []string{note}
 		}
 		creds = append(creds, c)
 	}

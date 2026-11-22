@@ -2,11 +2,13 @@ package docker
 
 import (
 	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -196,6 +198,29 @@ func TestDiscoverRemoteDockerHost(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "tcp") || strings.Contains(err.Error(), "CANARY") || strings.Contains(err.Error(), "10.0.0.1") {
 		t.Fatalf("err=%v", err)
+	}
+	if want := "DOCKER_HOST is a tcp endpoint, not a unix socket; not checked, and default socket locations were not checked either"; err.Error() != want {
+		t.Fatalf("err=%q want %q", err, want)
+	}
+}
+
+func TestClassify(t *testing.T) {
+	const other = "could not confirm the socket accepts connections"
+	for _, tc := range []struct {
+		name       string
+		err        error
+		kind, note string
+	}{
+		{"ok", nil, "socket", ""},
+		{"permission", fs.ErrPermission, "socket-unreachable", "permission denied"},
+		{"refused", syscall.ECONNREFUSED, "socket-unreachable", "nothing is listening"},
+		{"not found", fs.ErrNotExist, "socket-unreachable", "socket no longer exists"},
+		{"einval", syscall.EINVAL, "socket", other},
+		{"timeout", os.ErrDeadlineExceeded, "socket", other},
+	} {
+		if kind, note := classify(tc.err); kind != tc.kind || note != tc.note {
+			t.Errorf("%s: got %q %q, want %q %q", tc.name, kind, note, tc.kind, tc.note)
+		}
 	}
 }
 
