@@ -158,3 +158,26 @@ func (h History) Lookup(tool, target string) (Use, bool) {
 	u, ok := h.uses[tool+"\x00"+target]
 	return u, ok
 }
+
+// LookupFold is Lookup with target compared under strings.EqualFold, for tools whose
+// targets are case-insensitive. Matching keys combine: counts add up, Last is the latest
+// dated entry, and Dated is true if any matching key had a timestamp.
+func (h History) LookupFold(tool, target string) (Use, bool) {
+	var total Use
+	found := false
+	for k, u := range h.uses {
+		t, tg, _ := strings.Cut(k, "\x00")
+		if t != tool || !strings.EqualFold(tg, target) {
+			continue
+		}
+		found = true
+		total.Count += u.Count
+		if u.Dated {
+			if !total.Dated || u.Last.After(total.Last) {
+				total.Last = u.Last
+			}
+			total.Dated = true
+		}
+	}
+	return total, found
+}

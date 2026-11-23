@@ -14,10 +14,17 @@ import (
 
 // Resolve runs one read-only `gh api user` call against the credential's host.
 func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resolution, error) {
-	if s.skip[c.ID] {
+	switch {
+	case c.Host == "":
 		return nil, &scan.SkipError{Reason: "no host to query"}
+	case c.Kind == "env-token": // gh prefers the environment token
+	case c.Kind == "file-host" && !s.envHost[c.Host]: // active stored account, nothing overrides it
+	default:
+		return nil, nil // gh answers for another token; leave this one unchecked, without a note
 	}
-	out, err := s.run.Run(ctx, "gh", []string{"api", "-i", "--hostname", c.ID, "user"},
+	// ExecRunner inherits the parent environment (scan/runner.go:27), so a GH_TOKEN set for
+	// agentctl is what gh uses here.
+	out, err := s.run.Run(ctx, "gh", []string{"api", "-i", "--hostname", c.Host, "user"},
 		[]string{"GH_NO_UPDATE_NOTIFIER=1", "GH_PROMPT_DISABLED=1"})
 	if errors.Is(err, exec.ErrNotFound) {
 		return nil, &scan.SkipError{Reason: "gh not installed"}
@@ -28,6 +35,11 @@ func (s *Scanner) Resolve(ctx context.Context, c model.Credential) (*model.Resol
 	login, scopes, readable, err := ParseAPIResponse(out)
 	if err != nil {
 		return nil, err
+	}
+	// GitHub logins are case-insensitive.
+	// shortcut: a host entry with no known user accepts any login; tighten if gh starts exposing the account name offline.
+	if c.Kind == "file-host" && c.Identity != "" && !strings.EqualFold(login, c.Identity) {
+		return nil, errors.New("gh answered for a different account than hosts.yml names")
 	}
 	return &model.Resolution{Identity: model.Sanitize(login), Scopes: scopes, ScopesReadable: readable}, nil
 }
