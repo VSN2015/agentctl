@@ -25,7 +25,7 @@ func buildDeps(ctx context.Context, o run.Options, io IO) run.Deps {
 		Scanners: registry.Scanners(scan.ExecRunner{}),
 		Rules:    registry.ToolRules(),
 		Agents:   registry.Agents(registry.AgentParams{Getenv: io.Getenv, Home: io.Home, Cwd: io.Cwd, GOOS: runtime.GOOS}),
-		Env:      scan.Env{Home: io.Home, Getenv: io.Getenv},
+		Env:      scan.Env{Home: io.Home, Getenv: io.Getenv, SysRoot: io.SysRoot},
 		Now:      time.Now,
 		Confirm: func(p []string) (bool, error) {
 			return cancellable(ctx, func() (bool, error) {

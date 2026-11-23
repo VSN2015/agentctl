@@ -135,3 +135,38 @@ func TestReadCountsNonRegularHistoryAsUnread(t *testing.T) {
 		t.Fatal("Read did not return")
 	}
 }
+
+func TestLookupFold(t *testing.T) {
+	home := t.TempDir()
+	write(t, home, ".zsh_history",
+		": 1700000000:0;gh pr list --hostname GHE.Example.com\n"+
+			": 1700000100:0;gh pr list --hostname ghe.example.com\n"+
+			"gh pr list --hostname GHE.EXAMPLE.COM\n"+
+			": 1700000500:0;aws s3 ls --profile GHE.Example.com\n")
+	h := Read(home, noEnv)
+	u, ok := h.LookupFold("gh", "ghe.example.com")
+	if !ok || u.Count != 3 || !u.Dated || !u.Last.Equal(time.Unix(1700000100, 0)) {
+		t.Errorf("LookupFold = %+v %v", u, ok)
+	}
+	if _, ok := h.LookupFold("gh", "other.example.com"); ok {
+		t.Errorf("unrelated target matched")
+	}
+	if _, ok := h.LookupFold("gh", ""); ok {
+		t.Errorf("empty target must not match a named one")
+	}
+	if u, ok := h.Lookup("gh", "ghe.example.com"); !ok || u.Count != 1 {
+		t.Errorf("exact Lookup changed: %+v %v", u, ok)
+	}
+	if _, ok := h.Lookup("gh", "Ghe.Example.com"); ok {
+		t.Errorf("exact Lookup must stay case-sensitive")
+	}
+}
+
+func TestLookupFoldUndatedOnly(t *testing.T) {
+	home := t.TempDir()
+	write(t, home, ".bash_history", "gh pr list --hostname GHE.Example.com\n")
+	u, ok := Read(home, noEnv).LookupFold("gh", "ghe.example.com")
+	if !ok || u.Dated || u.Count != 1 {
+		t.Errorf("= %+v %v", u, ok)
+	}
+}

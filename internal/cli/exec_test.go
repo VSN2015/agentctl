@@ -24,7 +24,7 @@ func emptyHomeIO(t *testing.T) (IO, *bytes.Buffer, *bytes.Buffer) {
 		"DOCKER_HOST": "unix://" + filepath.Join(dir, "docker.sock")}
 	io, out, errb := newIO()
 	io.Getenv = func(k string) string { return env[k] }
-	io.Home, io.Cwd = dir, dir
+	io.Home, io.Cwd, io.SysRoot = dir, dir, filepath.Join(dir, "nosys")
 	return io, out, errb
 }
 
@@ -146,6 +146,24 @@ func TestBuildDepsProgressOnlyOnNonDumbErrTerminal(t *testing.T) {
 		}
 		if d := buildDeps(context.Background(), run.Options{Command: "doctor"}, io); (d.Progress != nil) != c.want {
 			t.Errorf("tty %v term %q: progress set %v", c.tty, c.term, d.Progress != nil)
+		}
+	}
+}
+
+// The EC2 hint reads /sys; a test that leaves IO.SysRoot empty would consult the real host.
+func TestBuildDepsSysRootSeam(t *testing.T) {
+	ec2 := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(ec2, "class/dmi/id"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ec2, "class/dmi/id/sys_vendor"), []byte("Amazon EC2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for sys, want := range map[string]bool{ec2: true, t.TempDir(): false} {
+		io, out, _ := emptyHomeIO(t)
+		io.SysRoot = sys
+		if defaultExec(context.Background(), run.Options{Command: "inventory", Offline: true, Since: 720 * 3600e9}, io); strings.Contains(out.String(), "default credential chain") != want {
+			t.Errorf("SysRoot %s: chain shown = %v, want %v\n%s", sys, !want, want, out)
 		}
 	}
 }

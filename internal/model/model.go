@@ -45,6 +45,7 @@ type Credential struct {
 	Access                        []AgentState
 	Resolved                      *Resolution
 	Notes                         []string
+	Host                          string // network host the credential belongs to; "" when unknown. Not part of the JSON report.
 }
 
 type AgentState struct {
@@ -79,5 +80,5 @@ type Finding struct {
 	Access      AgentAccess
 	FileBlocked bool
 	Issue       string // short label for the table: the risks and the usage state, joined by ", "; "" when none
-	Used        string // agent calls in the window as a table cell: "3", "3?" (not certain), "?" (cannot be attributed); "" when not about a credential
+	Used        string // agent calls in the window as a table cell: "3", "3?" (not certain), "?" (cannot be attributed); "" when not applicable (not about a credential, or a gh account not in effect)
 }

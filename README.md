@@ -14,11 +14,11 @@ This is `agentctl doctor --offline` on a machine with one AWS profile and a `gh`
 $ agentctl doctor --offline
 agentctl doctor - 30 days - offline
 
-SEV  TOOL    NAME        AGENT    USED 30d  CHECKED  ISSUE
------------------------------------------------------------------
-MED  AWS     staging     allowed  0         offline  unused
-MED  agent   shell       allowed  -         -        unrestricted
-OK   GitHub  github.com  allowed  41        offline  -
+SEV  TOOL    NAME              AGENT    USED 30d  CHECKED  ISSUE
+-----------------------------------------------------------------------
+MED  AWS     staging           allowed  0         offline  unused
+MED  agent   shell             allowed  -         -        unrestricted
+OK   GitHub  alice@github.com  allowed  41        offline  -
 
 Fix
   1  deny "Bash(aws:*)" in ~/.claude/settings.json
@@ -110,6 +110,8 @@ On a terminal the output is coloured with symbols. When piped or redirected (for
 ## Running on servers
 
 Credentials in the environment are reported by variable name. Online, AWS is resolved through the standard credential chain, so an instance or container role is reported even when there is no `~/.aws`. The answer is for the account `agentctl` runs as.
+
+GitHub logins are listed one per account per host (`alice@github.com`), or, when the file names no active account, one host-level entry (`github.com`) in addition to the accounts, and a token set through an environment variable is listed separately (`GH_TOKEN@github.com`). Offline, or for an account that is not the one in effect, `agentctl` does not check what the token can do. Such an account is reported as low severity "not in effect", with a `gh auth logout` or `gh auth status` suggestion instead of a deny rule.
 
 ## Limits
 

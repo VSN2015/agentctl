@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ func e2eRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	h := canaryhome.New(t, false)
 	var out, errb bytes.Buffer
-	io := IO{In: strings.NewReader(""), Out: &out, Err: &errb, Getenv: h.Getenv, Home: h.Dir, Cwd: h.Dir}
+	io := IO{In: strings.NewReader(""), Out: &out, Err: &errb, Getenv: h.Getenv, Home: h.Dir, Cwd: h.Dir, SysRoot: filepath.Join(h.Dir, "nosys")}
 	exec := func(ctx context.Context, o run.Options, io IO) int {
 		d := buildDeps(context.Background(), o, io)
 		d.Agents = registry.Agents(registry.AgentParams{Getenv: io.Getenv, Home: io.Home, Cwd: io.Cwd, GOOS: ""})

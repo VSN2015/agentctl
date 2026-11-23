@@ -22,7 +22,8 @@ type Context struct {
 	Dev         devuse.History
 	Getenv      func(string) string
 	HistoryDays int
-	MCP         []usage.MCPCall // the agent's MCP calls, read only by the MCP rule
+	MCP         []usage.MCPCall    // the agent's MCP calls, read only by the MCP rule
+	Creds       []model.Credential // every credential of the report; a tool rule may look at its siblings
 }
 
 type AgentInput struct {
@@ -91,7 +92,7 @@ func Evaluate(in Input, tools []ToolRule) []model.Finding {
 	out := []model.Finding{}
 	for _, a := range in.Agents {
 		x := Context{Agent: a.Name, Now: in.Now, Window: in.Window, Offline: in.Offline, Dev: in.Dev,
-			Getenv: in.Getenv, HistoryDays: a.Usage.HistoryDays(in.Now), MCP: a.Usage.MCP}
+			Getenv: in.Getenv, HistoryDays: a.Usage.HistoryDays(in.Now), MCP: a.Usage.MCP, Creds: in.Creds}
 		for _, c := range in.Creds {
 			out = append(out, evalOne(c, a, byTool[c.Tool], x))
 		}
@@ -124,6 +125,15 @@ func evalOne(c model.Credential, a AgentInput, rule ToolRule, x Context) model.F
 		return f
 	case st.Access == model.AccessDenied:
 		f.Headline = "denied by agent settings"
+		return f
+	}
+	if details, advice, ok := ghNotInEffect(c, x); ok { // gh never uses it: no usage verdict, no deny advice
+		f.Severity, f.Rules, f.Issue = model.SevLow, []string{"gh.not-in-effect"}, "not in effect"
+		if st.FileBlocked && st.Access == model.AccessAllowed { // same condition as the generic path; it adds no severity
+			f.Issue += ", file blocked, tool allowed"
+		}
+		f.Headline = "gh does not use this credential for " + model.Sanitize(hostOf(c))
+		f.Details, f.Advice = details, advice
 		return f
 	}
 	span := WindowText(x.Window)

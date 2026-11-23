@@ -23,6 +23,7 @@ type IO struct {
 	ErrIsTTY          bool
 	Getenv            func(string) string
 	Home, Cwd         string
+	SysRoot           string // "" means /sys; tests point it at a fixture so the host is never consulted
 }
 
 // ExitError carries an exit status out of RunE; Msg, if non-empty, is printed to Err.

@@ -259,3 +259,22 @@ func TestRenderDoctorInventoryFlag(t *testing.T) {
 		t.Errorf("no credentials: got %q want %q", got, want)
 	}
 }
+
+func TestJSONOmitsCredentialHost(t *testing.T) {
+	var b bytes.Buffer
+	r := Report{SchemaVersion: 1, Command: "inventory", Credentials: []model.Credential{
+		{Tool: "gh", ID: "alice@github.com", Label: "alice@github.com", Kind: "file-host", Host: "github.com"},
+	}}
+	if err := JSON(&b, r); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if strings.Contains(out, `"host"`) {
+		t.Errorf("JSON leaks the host key:\n%s", out)
+	}
+	for _, want := range []string{`"id": "alice@github.com"`, `"label": "alice@github.com"`, `"kind": "file-host"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("JSON lacks %s:\n%s", want, out)
+		}
+	}
+}

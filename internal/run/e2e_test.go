@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -36,24 +40,36 @@ func (f *fakeAWS) AccessKeyLastUsed(context.Context, string) (*aws.KeyUse, error
 	return &aws.KeyUse{At: time.Now().Add(-time.Hour), Service: "s3"}, nil
 }
 
-type fakeGH struct{ calls int }
+type fakeGH struct {
+	calls int
+	login string // "" answers octocat
+}
 
 func (f *fakeGH) Run(context.Context, string, []string, []string) ([]byte, error) {
 	f.calls++
-	return []byte("HTTP/2.0 200 OK\nX-Oauth-Scopes: repo, read:org\r\n\r\n{\"login\":\"octocat\"}"), nil
+	login := f.login
+	if login == "" {
+		login = "octocat"
+	}
+	return []byte("HTTP/2.0 200 OK\nX-Oauth-Scopes: repo, read:org\r\n\r\n{\"login\":\"" + login + "\"}"), nil
 }
 
 // runOnce runs the pipeline over home with fakes only; the real home and network are never touched.
 func runOnce(t *testing.T, h canaryhome.Home, o run.Options, tty bool) (code int, out, errb string, calls int) {
 	t.Helper()
-	api, runner := &fakeAWS{}, &fakeGH{}
+	return runOnceGH(t, h, o, tty, &fakeGH{})
+}
+
+func runOnceGH(t *testing.T, h canaryhome.Home, o run.Options, tty bool, runner *fakeGH) (code int, out, errb string, calls int) {
+	t.Helper()
+	api := &fakeAWS{}
 	var ob, eb bytes.Buffer
 	d := run.Deps{
 		Scanners: []scan.Scanner{aws.New(func(context.Context, string) (aws.API, error) { return api, nil }), gh.New(runner)},
 		Rules:    registry.ToolRules(),
 		Agents:   []agent.Agent{claude.New(h.Env["CLAUDE_CONFIG_DIR"], h.Dir, h.Dir, "")},
 		Dev:      func() devuse.History { return devuse.Read(h.Dir, h.Getenv) },
-		Env:      scan.Env{Home: h.Dir, Getenv: h.Getenv},
+		Env:      scan.Env{Home: h.Dir, Getenv: h.Getenv, SysRoot: filepath.Join(h.Dir, "nosys")},
 		Now:      time.Now,
 		Confirm: func(p []string) (bool, error) {
 			return confirm.Online(strings.NewReader(""), &eb, false, o.Offline, o.Yes, p)
@@ -155,7 +171,7 @@ func TestE2EEmptyHome(t *testing.T) {
 func TestE2EOfflineReportShowsWhatWasFound(t *testing.T) {
 	h := canaryhome.New(t, false)
 	_, inv, _, _ := runOnce(t, h, run.Options{Command: "inventory", Offline: true, Since: 720 * time.Hour}, false)
-	for _, want := range []string{canaryhome.MaskedID, "github.com - file-host", "Identity: octocat"} {
+	for _, want := range []string{canaryhome.MaskedID, "octocat@github.com - file-host", "Identity: octocat"} {
 		if !strings.Contains(inv, want) {
 			t.Errorf("inventory lacks %q:\n%s", want, inv)
 		}
@@ -168,4 +184,123 @@ func TestE2EOfflineReportShowsWhatWasFound(t *testing.T) {
 	if !found {
 		t.Errorf("doctor did not count the Claude Bash use of aws:\n%s", doc)
 	}
+}
+
+// Three logins on one host (alice via GH_TOKEN, alice and bob stored): one credential each, and
+// only the credential in effect is resolved or credited with gh usage.
+func TestE2EGitHubThreeLogins(t *testing.T) {
+	h := canaryhome.Home{Dir: t.TempDir()}
+	h.Env = map[string]string{"HOME": h.Dir, "GH_CONFIG_DIR": filepath.Join(h.Dir, "gh"), "GH_TOKEN": canaryhome.EnvGHToken}
+	put := func(rel, body string) {
+		p := filepath.Join(h.Dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("gh/hosts.yml", "github.com:\n    user: alice\n    users:\n        alice:\n            oauth_token: "+canaryhome.GHToken+"\n        bob:\n")
+	put(".claude/projects/p/s.jsonl", fmt.Sprintf(
+		`{"timestamp":%q,"message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"gh pr list"}}]}}`+"\n",
+		time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)))
+	h.Env["CLAUDE_CONFIG_DIR"] = filepath.Join(h.Dir, ".claude")
+
+	type cred struct {
+		ID, Label, Kind, Identity string
+		EnvVars                   []string `json:"env_vars"`
+		Resolved                  *struct{ Identity string }
+	}
+	type finding struct {
+		Tool, Subject, Used, Issue string
+		Advice                     []string
+	}
+	want := []struct {
+		id, label, kind, identity string
+		env                       []string
+		resolved                  bool
+	}{
+		{"@github.com", "GH_TOKEN@github.com", "env-token", "alice", []string{"GH_TOKEN"}, true},
+		{"alice@github.com", "alice@github.com", "file-host", "alice", nil, false},
+		{"bob@github.com", "bob@github.com", "file-host-inactive", "bob", nil, false},
+	}
+
+	// online JSON: one gh call, identity only on the env credential
+	gh := &fakeGH{login: "alice"}
+	code, out, errb, calls := runOnceGH(t, h, run.Options{Command: "doctor", Yes: true, JSON: true, Since: 720 * time.Hour}, false, gh)
+	noSecrets(t, "json", out, errb)
+	if (code != 0 && code != 1) || calls != 1 {
+		t.Fatalf("exit %d, %d provider calls, want 1\n%s\n%s", code, calls, out, errb)
+	}
+	var doc struct {
+		Credentials []cred
+		Findings    []finding
+		Notes       []string
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range doc.Notes { // the short-history note is expected; a gh note would mean a bad resolve
+		if strings.Contains(n, "gh") || strings.Contains(n, "GitHub") {
+			t.Errorf("unexpected gh note: %q", n)
+		}
+	}
+	var got []cred
+	for _, c := range doc.Credentials {
+		got = append(got, c)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d credentials, want 3:\n%s", len(got), out)
+	}
+	for i, w := range want {
+		c := got[i]
+		if c.ID != w.id || c.Label != w.label || c.Kind != w.kind || !slices.Equal(c.EnvVars, w.env) || (c.Resolved != nil) != w.resolved {
+			t.Errorf("credential %d = %+v, want %+v", i, c, w)
+		}
+		if w.resolved && (c.Resolved == nil || c.Resolved.Identity != "alice") {
+			t.Errorf("credential %s resolved %+v, want identity alice", w.id, c.Resolved)
+		}
+		if !w.resolved && c.Identity != w.identity {
+			t.Errorf("credential %s identity %q, want %q", w.id, c.Identity, w.identity)
+		}
+		rows := 0
+		for _, f := range doc.Findings {
+			if f.Tool == "gh" && f.Subject == w.id {
+				rows++
+				if inEffect := w.id == "@github.com"; inEffect == (f.Issue == "not in effect") || inEffect == (f.Used == "") {
+					t.Errorf("%s has usage %q, issue %q; only the credential in effect may have usage", w.id, f.Used, f.Issue)
+				}
+			}
+		}
+		if rows != 1 {
+			t.Errorf("%s has %d finding rows, want 1", w.id, rows)
+		}
+	}
+	for _, f := range doc.Findings {
+		if f.Tool == "gh" && f.Subject == "alice@github.com" && !strings.Contains(strings.Join(f.Advice, "|"), "second stored login") {
+			t.Errorf("stored alice shares the account of GH_TOKEN, advice: %q", f.Advice)
+		}
+	}
+	for _, f := range doc.Findings {
+		if f.Tool == "gh" && f.Subject == "@github.com" && f.Used != "1" && f.Used != "1?" {
+			t.Errorf("credential in effect should own the one gh call: %+v", f)
+		}
+	}
+
+	// offline text: three inventory rows, no call
+	_, inv, errb, calls := runOnceGH(t, h, run.Options{Command: "inventory", Offline: true, Since: 720 * time.Hour}, false, &fakeGH{})
+	noSecrets(t, "inventory", inv, errb)
+	if calls != 0 {
+		t.Errorf("%d provider calls offline", calls)
+	}
+	for _, w := range []string{"alice@github.com - file-host", "bob@github.com - file-host-inactive", "GH_TOKEN@github.com - env-token"} {
+		if !strings.Contains(inv, w) {
+			t.Errorf("inventory lacks %q:\n%s", w, inv)
+		}
+	}
+	if n := strings.Count(inv, "Environment variables"); n != 1 {
+		t.Errorf("%d env-var lines in inventory, want one (not on stored accounts):\n%s", n, inv)
+	}
+	_, docText, errb, _ := runOnceGH(t, h, run.Options{Command: "doctor", Offline: true, Since: 720 * time.Hour}, false, &fakeGH{})
+	noSecrets(t, "doctor text", docText, errb)
 }
