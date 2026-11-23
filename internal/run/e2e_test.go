@@ -69,7 +69,7 @@ func runOnceGH(t *testing.T, h canaryhome.Home, o run.Options, tty bool, runner 
 		Rules:    registry.ToolRules(),
 		Agents:   []agent.Agent{claude.New(h.Env["CLAUDE_CONFIG_DIR"], h.Dir, h.Dir, "")},
 		Dev:      func() devuse.History { return devuse.Read(h.Dir, h.Getenv) },
-		Env:      scan.Env{Home: h.Dir, Getenv: h.Getenv},
+		Env:      scan.Env{Home: h.Dir, Getenv: h.Getenv, SysRoot: filepath.Join(h.Dir, "nosys")},
 		Now:      time.Now,
 		Confirm: func(p []string) (bool, error) {
 			return confirm.Online(strings.NewReader(""), &eb, false, o.Offline, o.Yes, p)
