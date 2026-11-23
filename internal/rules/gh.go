@@ -64,13 +64,19 @@ func ghNotInEffect(c model.Credential, x Context) (details, advice []string, ok 
 		return nil, nil, false
 	}
 	host := model.Sanitize(hostOf(c))
+	var sameAccount string // label of an environment token that resolved to this account
 	for _, o := range x.Creds {
 		if o.Tool == "gh" && hostOf(o) == hostOf(c) && inEffect(o, x) {
 			if o.Kind == "file-host" && o.Identity == "" { // host-only: one of the listed accounts may be the login gh uses
 				return []string{"hosts.yml names no active account for " + host + "; gh uses the token stored for the host, which may belong to this account"},
 					[]string{"check which GitHub account gh uses: gh auth status --hostname " + host}, true
 			}
-			details = append(details, "gh uses "+cmp.Or(o.Label, o.ID)+" for "+host)
+			label := cmp.Or(o.Label, o.ID)
+			details = append(details, "gh uses "+label+" for "+host)
+			if o.Kind == "env-token" && o.Resolved != nil && o.Resolved.Identity != "" && strings.EqualFold(o.Resolved.Identity, c.Identity) {
+				sameAccount = label
+				details = append(details, label+" belongs to the same account")
+			}
 			break
 		}
 	}
@@ -81,6 +87,9 @@ func ghNotInEffect(c model.Credential, x Context) (details, advice []string, ok 
 		return details, []string{"check which GitHub account gh uses: gh auth status --hostname " + host}, true
 	}
 	cmd := "gh auth logout --hostname " + host + " --user " + c.Identity
+	if sameAccount != "" {
+		return details, []string{"this is a second stored login for an account you use through " + sameAccount + "; log out of it only if you never run gh without that variable: " + cmd}, true
+	}
 	advice = []string{"log out of a GitHub account you do not use: " + cmd}
 	return details, advice, true
 }

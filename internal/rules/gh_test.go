@@ -531,3 +531,38 @@ func TestGHEvaluateMaximumDiscoverSetIsFast(t *testing.T) {
 		}
 	}
 }
+
+func TestGHNotInEffectSameAccountAsEnvToken(t *testing.T) {
+	_, _, env := ghTrio()
+	logout := "gh auth logout --hostname github.com --user "
+	for _, stored := range []string{"alice", "Alice"} {
+		c := ghCred("github.com", nil)
+		c.Kind, c.Identity = "file-host", stored
+		e := env
+		e.Resolved = &model.Resolution{Identity: "alice"}
+		d, adv, ok := ghNotInEffect(c, Context{Creds: []model.Credential{c, e}})
+		wantD := []string{"gh uses GH_TOKEN@github.com for github.com", "GH_TOKEN@github.com belongs to the same account"}
+		wantA := []string{"this is a second stored login for an account you use through GH_TOKEN@github.com; log out of it only if you never run gh without that variable: " + logout + stored}
+		if !ok || !reflect.DeepEqual(d, wantD) || !reflect.DeepEqual(adv, wantA) || strings.Contains(strings.Join(adv, "|"), "you do not use") {
+			t.Errorf("%s: %v %q %q", stored, ok, d, adv)
+		}
+	}
+	// different account, and offline (not resolved): today's text
+	for name, r := range map[string]*model.Resolution{"other": {Identity: "carol"}, "offline": nil, "empty": {}} {
+		c := ghCred("github.com", nil)
+		c.Kind, c.Identity = "file-host-inactive", "bob"
+		e := env
+		e.Resolved = r
+		d, adv, _ := ghNotInEffect(c, Context{Creds: []model.Credential{c, e}})
+		if !reflect.DeepEqual(d, []string{"gh uses GH_TOKEN@github.com for github.com"}) || !reflect.DeepEqual(adv, []string{"log out of a GitHub account you do not use: " + logout + "bob"}) {
+			t.Errorf("%s: %q %q", name, d, adv)
+		}
+	}
+	c := ghCred("github.com", nil)
+	c.Kind, c.Identity = "file-host", "alice"
+	e := env
+	_, adv, _ := ghNotInEffect(c, Context{Creds: []model.Credential{c, e}})
+	if !reflect.DeepEqual(adv, []string{"log out of a GitHub account you do not use: " + logout + "alice"}) {
+		t.Errorf("offline alice: %q", adv)
+	}
+}

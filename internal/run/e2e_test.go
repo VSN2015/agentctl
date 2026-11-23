@@ -211,7 +211,10 @@ func TestE2EGitHubThreeLogins(t *testing.T) {
 		EnvVars                   []string `json:"env_vars"`
 		Resolved                  *struct{ Identity string }
 	}
-	type finding struct{ Tool, Subject, Used, Issue string }
+	type finding struct {
+		Tool, Subject, Used, Issue string
+		Advice                     []string
+	}
 	want := []struct {
 		id, label, kind, identity string
 		env                       []string
@@ -271,6 +274,11 @@ func TestE2EGitHubThreeLogins(t *testing.T) {
 		}
 		if rows != 1 {
 			t.Errorf("%s has %d finding rows, want 1", w.id, rows)
+		}
+	}
+	for _, f := range doc.Findings {
+		if f.Tool == "gh" && f.Subject == "alice@github.com" && !strings.Contains(strings.Join(f.Advice, "|"), "second stored login") {
+			t.Errorf("stored alice shares the account of GH_TOKEN, advice: %q", f.Advice)
 		}
 	}
 	for _, f := range doc.Findings {
